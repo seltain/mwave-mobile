@@ -10,10 +10,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { api, apiConfigured } from './api';
+import { api } from './api';
+import { KeySetup, loadKey, onKeyForgotten } from './key';
 import type { RootParams, StackParams, TabParams } from './nav';
 import { AlbumScreen, ArtistScreen } from './screens/ArtistScreen';
 import { HomeScreen } from './screens/HomeScreen';
@@ -22,7 +23,6 @@ import { NowPlayingScreen, QueueScreen } from './screens/NowPlayingScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { AppProvider, useApp } from './state';
 import { useTheme } from './theme';
-import { EmptyState } from './ui/kit';
 import { TabBar } from './ui/TabBar';
 
 const Root = createNativeStackNavigator<RootParams>();
@@ -103,13 +103,6 @@ function Main() {
     ...(t.name === 'dark' ? DarkTheme : DefaultTheme),
     colors: { ...(t.name === 'dark' ? DarkTheme : DefaultTheme).colors, background: t.c.bg, card: t.c.surf, text: t.c.text, primary: t.c.accent, border: t.c.glassBorder },
   };
-  if (!apiConfigured) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', backgroundColor: t.c.bg }}>
-        <EmptyState title="Приложение собрано без адреса сервера" text="Нужны секреты MWAVE_URL и MWAVE_KEY в GitHub Actions." />
-      </View>
-    );
-  }
   return (
     <NavigationContainer theme={navTheme} linking={linking}>
       <StatusBar style={t.name === 'dark' ? 'light' : 'dark'} />
@@ -126,12 +119,22 @@ function Main() {
 export default function App() {
   const [fontsLoaded] = useFonts({ Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold });
   const t = useTheme();
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: t.c.bg }} />;
+  // Ключ сервера: undefined = ещё читаем из Связки ключей, null = нет (экран ввода), строка = есть
+  const [key, setKey] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    void loadKey().then(setKey);
+    return onKeyForgotten(() => setKey(null));
+  }, []);
+  if (!fontsLoaded || key === undefined) return <View style={{ flex: 1, backgroundColor: t.c.bg }} />;
   return (
     <SafeAreaProvider>
-      <AppProvider>
-        <Main />
-      </AppProvider>
+      {key ? (
+        <AppProvider>
+          <Main />
+        </AppProvider>
+      ) : (
+        <KeySetup onDone={() => void loadKey().then(setKey)} />
+      )}
     </SafeAreaProvider>
   );
 }

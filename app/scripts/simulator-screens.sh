@@ -55,6 +55,18 @@ shot() { # имя, ссылка, сколько ждать
   xcrun simctl io "$DEVICE" screenshot "$OUT/$1.png" >/dev/null 2>&1 && say "снимок $1"
 }
 
+# Первый запуск: экран ввода ключа (ключа в приложении нет), потом ключ ссылкой mwave://setup
+xcrun simctl ui "$DEVICE" appearance dark
+xcrun simctl launch "$DEVICE" app.mwave.mobile >/dev/null
+sleep 6
+xcrun simctl io "$DEVICE" screenshot "$OUT/key-setup-dark.png" >/dev/null 2>&1 && say 'снимок key-setup-dark'
+if [ -n "${MWAVE_KEY:-}" ]; then
+  xcrun simctl openurl "$DEVICE" "mwave://setup?key=$MWAVE_KEY" || say 'ключ не передался'
+  sleep 6
+else
+  say 'Нет MWAVE_KEY: дальше снимки только экрана ввода ключа'
+fi
+
 for THEME in dark light; do
   xcrun simctl ui "$DEVICE" appearance "$THEME"
   xcrun simctl terminate "$DEVICE" app.mwave.mobile >/dev/null 2>&1 || true
@@ -73,6 +85,7 @@ for THEME in dark light; do
   shot "fav-$THEME" 'mwave://fav' 3
 done
 # Журнал приложения (ошибки JavaScript попадают сюда)
-xcrun simctl spawn "$DEVICE" log show --last 15m --predicate 'process == "mwave"' --style compact 2>/dev/null | grep -iE 'error|exception|fatal' | tail -40 >> "$LOG" || true
+# Ключ из журнала вырезается: артефакты публичного репозитория видны всем, а GitHub скрывает секреты только в выводе шагов
+xcrun simctl spawn "$DEVICE" log show --last 15m --predicate 'process == "mwave"' --style compact 2>/dev/null | grep -iE 'error|exception|fatal'   | grep -v 'setup?key' | { if [ -n "${MWAVE_KEY:-}" ]; then grep -vF "$MWAVE_KEY"; else cat; fi; } | tail -40 >> "$LOG" || true
 say 'Готово'
 ls -la "$OUT" | tee -a "$LOG"

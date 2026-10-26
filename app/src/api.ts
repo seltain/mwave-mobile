@@ -1,20 +1,26 @@
-// Клиент сервиса mwave на сервере (mwave-mobile/server). Адрес и ключ подставляются при сборке
-// из переменных EXPO_PUBLIC_MWAVE_URL и EXPO_PUBLIC_MWAVE_KEY (секреты GitHub Actions), в репозитории их нет.
+// Клиент сервиса mwave на сервере (mwave-mobile/server).
+// Адрес сервера публичный и задан здесь (можно заменить при сборке переменной EXPO_PUBLIC_MWAVE_URL).
+// Ключ в приложение НЕ вшит: его вводят один раз при первом запуске, он хранится в Связке ключей iPhone (key.ts).
 import type { AlbumPage, AlbumRef, ArtistCard, ArtistOption, ArtistRef } from './pc/main/artist/types';
 import type { AlbumHit } from './pc/main/artist/ytmArtist';
 import type { Candidate } from './pc/main/resolver/types';
 
 export type { AlbumHit, AlbumPage, AlbumRef, ArtistCard, ArtistOption, ArtistRef, Candidate };
 
-const BASE = (process.env.EXPO_PUBLIC_MWAVE_URL ?? '').replace(/\/$/, '');
-const KEY = process.env.EXPO_PUBLIC_MWAVE_KEY ?? '';
+export const SERVER_URL = (process.env.EXPO_PUBLIC_MWAVE_URL || 'https://mwave.swiftsuper.online:8781').replace(/\/$/, '');
+const BASE = SERVER_URL;
+let KEY = '';
 
-export const apiConfigured = !!BASE && !!KEY;
+/** Ключ, введённый на телефоне (до этого запросы к сервису не идут). */
+export function setApiKey(key: string): void {
+  KEY = key.trim();
+}
+export const hasApiKey = () => !!KEY;
 
 export class ApiError extends Error {}
 
 async function post<T>(path: string, body: unknown, timeoutMs = 30_000): Promise<T> {
-  if (!apiConfigured) throw new ApiError('Приложение собрано без адреса сервера');
+  if (!KEY) throw new ApiError('Не введён ключ сервера');
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -48,6 +54,24 @@ export type ArtistResult =
   | { status: 'error'; message: string };
 export type RadioResponse = { ok: true; tracks: Candidate[]; from: string } | { ok: false; message: string };
 export type ReleasesItem = { name: string; ytId?: string; thumbnail?: string; releases: AlbumRef[] };
+
+/** Проверить ключ на сервере: true = подходит, false = сервер его не принял. Нет связи: ошибка. */
+export async function checkKey(key: string): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20_000);
+  try {
+    const r = await fetch(`${BASE}/api/info`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key.trim()}` }, body: '{}', signal: ctrl.signal });
+    if (r.status === 401) return false;
+    if (r.status === 429) throw new ApiError('Слишком много неверных попыток, подожди 10 минут');
+    if (!r.ok) throw new ApiError(`Сервер ответил ${r.status}`);
+    return true;
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError('Нет связи с сервером. Проверь интернет.');
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export const api = {
   search: (q: string, source: 'ytmusic' | 'soundcloud') => post<SearchResponse>('/api/search', { q, source }, source === 'soundcloud' ? 30_000 : 20_000),

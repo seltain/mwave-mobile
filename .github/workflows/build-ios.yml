@@ -1,7 +1,8 @@
 # Сборка неподписанного IPA mwave для iPhone (arm64). Основа: проверенная сборка Cabbit iOS Test
 # (те же macos-15, Xcode 16.4, Node 22.14.0, Ruby 3.3.7, CocoaPods 1.16.2, expo prebuild + xcodebuild без подписи).
 # Запуск только вручную (Actions -> Build iPhone IPA -> Run workflow), чтобы не тратить минуты macOS.
-# Секреты репозитория: MWAVE_URL (адрес сервера) и MWAVE_KEY (ключ сервиса), в коде их нет.
+# Ключ сервиса в приложение НЕ вшивается: его вводят на iPhone при первом запуске (репозиторий и сборки публичные).
+# Секрет MWAVE_KEY нужен только шагу снимков: ключ вводится в симулятор после сборки и в IPA не попадает.
 name: Build iPhone IPA
 
 on:
@@ -31,17 +32,9 @@ jobs:
       EXPO_NO_TELEMETRY: '1'
       NODE_ENV: production
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
-      # Подставляются в приложение при сборке JS (Metro), в репозиторий не попадают
-      EXPO_PUBLIC_MWAVE_URL: ${{ secrets.MWAVE_URL }}
-      EXPO_PUBLIC_MWAVE_KEY: ${{ secrets.MWAVE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Check secrets
-        run: |
-          test -n "$EXPO_PUBLIC_MWAVE_URL" || { echo 'Нет секрета MWAVE_URL'; exit 1; }
-          test -n "$EXPO_PUBLIC_MWAVE_KEY" || { echo 'Нет секрета MWAVE_KEY'; exit 1; }
 
       - name: Node.js
         uses: actions/setup-node@v4
@@ -102,6 +95,8 @@ jobs:
 
       - name: Screenshots in iPhone simulator
         if: ${{ inputs.screenshots }}
+        env:
+          MWAVE_KEY: ${{ secrets.MWAVE_KEY }}
         run: bash scripts/simulator-screens.sh
 
       - name: Upload screenshots
@@ -132,3 +127,4 @@ jobs:
         run: |
           echo '### mwave: IPA для iPhone собран' >> "$GITHUB_STEP_SUMMARY"
           echo 'Скачать: артефакт mwave-ipa (ZIP), внутри mwave-unsigned.ipa. Установить через Sideloadly с бесплатным Apple ID.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Ключа сервера в IPA нет: приложение спросит его при первом запуске.' >> "$GITHUB_STEP_SUMMARY"

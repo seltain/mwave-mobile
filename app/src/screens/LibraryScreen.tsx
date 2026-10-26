@@ -10,6 +10,7 @@ import { IconMore, IconPlay, IconPlus, IconShuffle } from '../ui/icons';
 import { ArtistBubble, askText, Btn, Chip, Cover, EmptyState, H1, IconBtn, TrackRow, Txt } from '../ui/kit';
 import { Page } from '../ui/Page';
 import { Hero, PlayButtons } from './ArtistScreen';
+import { forgetKey } from '../key';
 
 type Tab = 'liked' | 'playlists' | 'history';
 const TABS: [Tab, string][] = [
@@ -123,6 +124,18 @@ export function LibraryScreen() {
         ))}
       </ScrollView>
       {body}
+      <View style={{ alignItems: 'center', marginTop: size.space * 2 }}>
+        <Btn
+          small
+          title="Сменить ключ сервера"
+          onPress={() =>
+            Alert.alert('Сменить ключ сервера?', 'Приложение попросит ввести ключ заново. Профиль, плейлисты и история останутся.', [
+              { text: 'Отмена', style: 'cancel' },
+              { text: 'Сменить', style: 'destructive', onPress: () => void forgetKey() },
+            ])
+          }
+        />
+      </View>
     </Page>
   );
 }
