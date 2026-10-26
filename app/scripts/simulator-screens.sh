@@ -49,41 +49,40 @@ xcrun simctl boot "$DEVICE" || true
 xcrun simctl bootstatus "$DEVICE" -b
 xcrun simctl install "$DEVICE" "$APP"
 
-shot() { # имя, ссылка, сколько ждать
-  xcrun simctl openurl "$DEVICE" "$2" || say "не открылась ссылка $2"
+snap() { xcrun simctl io "$DEVICE" screenshot "$OUT/$1.png" >/dev/null 2>&1 && say "снимок $1"; }
+# Экран открывается новым запуском с аргументами -mwaveKey и -mwaveOpen (см. src/launchArgs.ts).
+# Ссылки через simctl openurl не годятся: iOS спрашивает «Open in mwave?».
+open_screen() { # имя снимка, ссылка mwave://, сколько ждать
+  xcrun simctl terminate "$DEVICE" app.mwave.mobile >/dev/null 2>&1 || true
+  xcrun simctl launch "$DEVICE" app.mwave.mobile -mwaveKey "${MWAVE_KEY:-}" -mwaveOpen "$2" >/dev/null
   sleep "$3"
-  xcrun simctl io "$DEVICE" screenshot "$OUT/$1.png" >/dev/null 2>&1 && say "снимок $1"
+  snap "$1"
 }
 
-# Первый запуск: экран ввода ключа (ключа в приложении нет), потом ключ ссылкой mwave://setup
-xcrun simctl ui "$DEVICE" appearance dark
-xcrun simctl launch "$DEVICE" app.mwave.mobile >/dev/null
-sleep 6
-xcrun simctl io "$DEVICE" screenshot "$OUT/key-setup-dark.png" >/dev/null 2>&1 && say 'снимок key-setup-dark'
-if [ -n "${MWAVE_KEY:-}" ]; then
-  xcrun simctl openurl "$DEVICE" "mwave://setup?key=$MWAVE_KEY" || say 'ключ не передался'
-  sleep 6
-else
-  say 'Нет MWAVE_KEY: дальше снимки только экрана ввода ключа'
-fi
-
-for THEME in dark light; do
+# Первый запуск: ключа в приложении нет, экран ввода ключа (в обеих темах)
+for THEME in light dark; do
   xcrun simctl ui "$DEVICE" appearance "$THEME"
   xcrun simctl terminate "$DEVICE" app.mwave.mobile >/dev/null 2>&1 || true
   xcrun simctl launch "$DEVICE" app.mwave.mobile >/dev/null
   sleep 6
-  shot "home-empty-$THEME" 'mwave://home' 3
-  shot "search-$THEME" 'mwave://search?q=PHARAOH' 12
-  shot "artist-$THEME" 'mwave://search/artist?name=PHARAOH' 12
-  shot "play-$THEME" 'mwave://play?q=PHARAOH%20Дико%20например' 15
-  shot "now-playing-$THEME" 'mwave://now' 4
-  shot "queue-$THEME" 'mwave://queue' 3
-  xcrun simctl openurl "$DEVICE" 'mwave://home' || true
-  sleep 3
-  shot "home-$THEME" 'mwave://home' 3
-  shot "library-$THEME" 'mwave://library?tab=history' 3
-  shot "fav-$THEME" 'mwave://fav' 3
+  snap "key-setup-$THEME"
 done
+if [ -z "${MWAVE_KEY:-}" ]; then
+  say 'Нет MWAVE_KEY: дальше снимков нет'
+else
+  for THEME in dark light; do
+    xcrun simctl ui "$DEVICE" appearance "$THEME"
+    [ "$THEME" = dark ] && open_screen "home-empty-$THEME" 'mwave://home' 8
+    open_screen "search-$THEME" 'mwave://search?q=PHARAOH' 14
+    open_screen "artist-$THEME" 'mwave://search/artist?name=PHARAOH' 14
+    # 40 с: песня успевает стать «прослушанной» и попадает в историю (для главной и медиатеки)
+    open_screen "now-playing-$THEME" 'mwave://play?q=PHARAOH%20Дико%20например&show=now' 40
+    open_screen "queue-$THEME" 'mwave://play?q=Kai%20Angel&show=queue' 15
+    open_screen "home-$THEME" 'mwave://home' 8
+    open_screen "library-$THEME" 'mwave://library?tab=history' 6
+    open_screen "fav-$THEME" 'mwave://fav' 6
+  done
+fi
 # Журнал приложения (ошибки JavaScript попадают сюда)
 # Ключ из журнала вырезается: артефакты публичного репозитория видны всем, а GitHub скрывает секреты только в выводе шагов
 xcrun simctl spawn "$DEVICE" log show --last 15m --predicate 'process == "mwave"' --style compact 2>/dev/null | grep -iE 'error|exception|fatal'   | grep -v 'setup?key' | { if [ -n "${MWAVE_KEY:-}" ]; then grep -vF "$MWAVE_KEY"; else cat; fi; } | tail -40 >> "$LOG" || true

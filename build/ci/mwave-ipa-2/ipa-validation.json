@@ -1,0 +1,18 @@
+{
+  "ipa": "mwave-unsigned.ipa",
+  "sha256": "1acda23a5ec480a640dfc1b0f5a1d0dc65afc702937e7d819593b95e3156606d",
+  "bundle_id": "app.mwave.mobile",
+  "version": "1.0.0",
+  "minimum_ios": "15.1",
+  "main_binary": {
+    "architecture": "arm64",
+    "platform": "iOS device",
+    "filetype": 2,
+    "code_signature_present": false
+  },
+  "native_binaries_checked": 4,
+  "embedded_js_bytes": 2767716,
+  "unsigned_required": true,
+  "structural_validation": "passed",
+  "physical_device_installation": "not tested by this script"
+}

@@ -5,7 +5,7 @@
 //   mwave://search/artist?name=PHARAOH, mwave://search/album?id=..., mwave://now, mwave://queue, mwave://play?q=...
 import { Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold, useFonts } from '@expo-google-fonts/onest';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { DarkTheme, DefaultTheme, NavigationContainer, type LinkingOptions } from '@react-navigation/native';
+import { createNavigationContainerRef, DarkTheme, DefaultTheme, NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
@@ -13,8 +13,9 @@ import * as SystemUI from 'expo-system-ui';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { api } from './api';
-import { KeySetup, loadKey, onKeyForgotten } from './key';
+import { api, checkKey } from './api';
+import { KeySetup, loadKey, onKeyForgotten, saveKey } from './key';
+import { launchArg } from './launchArgs';
 import type { RootParams, StackParams, TabParams } from './nav';
 import { AlbumScreen, ArtistScreen } from './screens/ArtistScreen';
 import { HomeScreen } from './screens/HomeScreen';
@@ -58,8 +59,13 @@ function TabsScreen() {
   );
 }
 
+const navRef = createNavigationContainerRef<RootParams>();
+/** Первая ссылка: из аргументов запуска (снимки в симуляторе) или та, которой открыли приложение. */
+const firstUrl = async () => launchArg('mwaveOpen') ?? (await Linking.getInitialURL());
+
 const linking: LinkingOptions<RootParams> = {
   prefixes: ['mwave://'],
+  getInitialURL: firstUrl,
   config: {
     screens: {
       Tabs: {
@@ -76,7 +82,10 @@ const linking: LinkingOptions<RootParams> = {
   },
 };
 
-/** mwave://play?q=...: найти и включить первую песню (для снимков «Сейчас играет» и очереди в симуляторе). */
+/**
+ * mwave://play?q=...&show=now|queue: найти и включить первую песню, затем открыть «Сейчас играет» или очередь
+ * (для снимков экрана в симуляторе).
+ */
 function PlayLinks() {
   const { player } = useApp();
   useEffect(() => {
@@ -85,9 +94,14 @@ function PlayLinks() {
       const { hostname, queryParams } = Linking.parse(url);
       const q = typeof queryParams?.q === 'string' ? queryParams.q : '';
       if (hostname !== 'play' || !q) return;
-      void api.search(q, 'ytmusic').then((r) => r.items.length && player.playContext(r.items, 0, `Поиск «${q}»`));
+      const show = queryParams?.show;
+      void api.search(q, 'ytmusic').then((r) => {
+        if (!r.items.length) return;
+        player.playContext(r.items, 0, `Поиск «${q}»`);
+        if (navRef.isReady() && (show === 'now' || show === 'queue')) navRef.navigate(show === 'now' ? 'NowPlaying' : 'Queue');
+      });
     };
-    void Linking.getInitialURL().then(handle);
+    void firstUrl().then(handle);
     const sub = Linking.addEventListener('url', (e) => handle(e.url));
     return () => sub.remove();
   }, [player]);
@@ -104,7 +118,7 @@ function Main() {
     colors: { ...(t.name === 'dark' ? DarkTheme : DefaultTheme).colors, background: t.c.bg, card: t.c.surf, text: t.c.text, primary: t.c.accent, border: t.c.glassBorder },
   };
   return (
-    <NavigationContainer theme={navTheme} linking={linking}>
+    <NavigationContainer ref={navRef} theme={navTheme} linking={linking}>
       <StatusBar style={t.name === 'dark' ? 'light' : 'dark'} />
       <PlayLinks />
       <Root.Navigator screenOptions={{ headerShown: false }}>
@@ -122,7 +136,15 @@ export default function App() {
   // Ключ сервера: undefined = ещё читаем из Связки ключей, null = нет (экран ввода), строка = есть
   const [key, setKey] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    void loadKey().then(setKey);
+    void loadKey().then(async (k) => {
+      // Снимки в симуляторе: ключ аргументом запуска, только если своего ключа нет и сервер его подтвердил
+      const arg = launchArg('mwaveKey');
+      if (!k && arg && (await checkKey(arg).catch(() => false))) {
+        await saveKey(arg);
+        k = arg;
+      }
+      setKey(k);
+    });
     return onKeyForgotten(() => setKey(null));
   }, []);
   if (!fontsLoaded || key === undefined) return <View style={{ flex: 1, backgroundColor: t.c.bg }} />;
