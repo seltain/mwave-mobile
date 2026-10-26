@@ -1,0 +1,37 @@
+# Сервис mwave для приложения на iPhone. Пользователь mwave без прав root, всё в /opt/mwave.
+# Слушает только 127.0.0.1:8780, наружу через nginx (HTTPS, порт 8781).
+[Unit]
+Description=mwave: сервис для приложения на iPhone
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mwave
+Group=mwave
+WorkingDirectory=/opt/mwave
+Environment=HOME=/opt/mwave XDG_CACHE_HOME=/opt/mwave/cache DENO_DIR=/opt/mwave/cache/deno PATH=/opt/mwave/bin:/usr/bin:/bin
+Environment=MWAVE_PORT=8780 MWAVE_HOST=127.0.0.1 MWAVE_TOKEN_FILE=/opt/mwave/secret/token MWAVE_LOG_DIR=/opt/mwave/logs
+Environment=MWAVE_PUBLIC_URL=https://mwave.swiftsuper.online:8781
+ExecStart=/opt/mwave/bin/deno run --allow-net --allow-env --allow-read=/opt/mwave --allow-write=/opt/mwave/logs --allow-run=/opt/mwave/bin/yt-dlp --allow-sys /opt/mwave/app/mwave-server.mjs
+# Упал: перезапуск через 3 с
+Restart=always
+RestartSec=3
+# Сервер общий с ботами заказчика: память и процессор ограничены, при нехватке страдает только mwave
+MemoryHigh=500M
+MemoryMax=700M
+CPUQuota=80%
+TasksMax=64
+# Защита: без новых прав, система только для чтения, писать можно только в /opt/mwave
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/mwave
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

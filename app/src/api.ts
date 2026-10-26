@@ -1,0 +1,64 @@
+// Клиент сервиса mwave на сервере (mwave-mobile/server). Адрес и ключ подставляются при сборке
+// из переменных EXPO_PUBLIC_MWAVE_URL и EXPO_PUBLIC_MWAVE_KEY (секреты GitHub Actions), в репозитории их нет.
+import type { AlbumPage, AlbumRef, ArtistCard, ArtistOption, ArtistRef } from './pc/main/artist/types';
+import type { AlbumHit } from './pc/main/artist/ytmArtist';
+import type { Candidate } from './pc/main/resolver/types';
+
+export type { AlbumHit, AlbumPage, AlbumRef, ArtistCard, ArtistOption, ArtistRef, Candidate };
+
+const BASE = (process.env.EXPO_PUBLIC_MWAVE_URL ?? '').replace(/\/$/, '');
+const KEY = process.env.EXPO_PUBLIC_MWAVE_KEY ?? '';
+
+export const apiConfigured = !!BASE && !!KEY;
+
+export class ApiError extends Error {}
+
+async function post<T>(path: string, body: unknown, timeoutMs = 30_000): Promise<T> {
+  if (!apiConfigured) throw new ApiError('Приложение собрано без адреса сервера');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(BASE + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
+      body: JSON.stringify(body ?? {}),
+      signal: ctrl.signal,
+    });
+    if (r.status === 401) throw new ApiError('Сервер не принял ключ приложения');
+    if (r.status === 429) throw new ApiError('Слишком много запросов, подожди минуту');
+    if (!r.ok) throw new ApiError(`Сервер ответил ${r.status}`);
+    return (await r.json()) as T;
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError(ctrl.signal.aborted ? 'Сервер не ответил вовремя' : 'Нет связи с сервером. Проверь интернет.');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export type SearchResponse = { items: Candidate[]; error?: string };
+export type MoreResponse = { artists: ArtistOption[]; albums: AlbumHit[]; error?: string };
+export type PrepareResponse =
+  | { ok: true; url: string; protocol: 'http' | 'hls'; duration: number | null; playing: Candidate; fallbackReason?: string }
+  | { ok: false; reason: string; message: string };
+export type ArtistResult =
+  | { status: 'ok'; card: ArtistCard }
+  | { status: 'choose'; options: ArtistOption[] }
+  | { status: 'not_found' }
+  | { status: 'error'; message: string };
+export type RadioResponse = { ok: true; tracks: Candidate[]; from: string } | { ok: false; message: string };
+export type ReleasesItem = { name: string; ytId?: string; thumbnail?: string; releases: AlbumRef[] };
+
+export const api = {
+  search: (q: string, source: 'ytmusic' | 'soundcloud') => post<SearchResponse>('/api/search', { q, source }, source === 'soundcloud' ? 30_000 : 20_000),
+  searchMore: (q: string) => post<MoreResponse>('/api/search/more', { q }),
+  prepare: (candidate: Candidate) => post<PrepareResponse>('/api/prepare', { candidate }, 120_000),
+  prefetch: (list: Candidate[]) => post<{ ok: boolean }>('/api/prefetch', { list: list.slice(0, 6) }).catch(() => undefined),
+  artistQuick: (ref: ArtistRef) => post<ArtistResult>('/api/artist/quick', { ref }),
+  artistFull: (ref: ArtistRef) => post<ArtistResult>('/api/artist/full', { ref }, 60_000),
+  moreSongs: (ref: ArtistRef) => post<{ status: 'ok'; songs: Candidate[]; hasMore: boolean } | { status: 'error'; message: string }>('/api/artist/more-songs', { ref }),
+  allAlbums: (ref: ArtistRef, kind: AlbumRef['kind']) => post<{ status: 'ok'; albums: AlbumRef[] } | { status: 'error'; message: string }>('/api/artist/all-albums', { ref, kind }),
+  album: (id: string) => post<{ status: 'ok'; album: AlbumPage } | { status: 'error'; message: string }>('/api/album', { id }),
+  radio: (seed: Candidate, exclude: Candidate[], recent: Candidate[]) => post<RadioResponse>('/api/radio', { seed, exclude, recent }, 60_000),
+  releases: (artists: ArtistRef[]) => post<ReleasesItem[]>('/api/releases', { artists }, 120_000),
+};

@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+ios/
+android/
+build/
+dist/
+*.ipa
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+.env*

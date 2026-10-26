@@ -1,0 +1,160 @@
+// Копия из проекта ПК: music-circle-v2/src/shared/searchRank.ts (scripts/sync-pc.mjs). Не править здесь.
+// Порядок выдачи поиска, как в крупных сервисах:
+//   "Лучший результат" (артист, если запрос про артиста; песня, если запрос явно про песню),
+//   рядом 4-5 лучших песен, ниже артисты, альбомы и остальные песни.
+// Совпадение имени артиста с запросом поднимает его наверх; ремиксы, ускоренные версии и чужие
+// исполнители с похожими словами в названии идут ниже оригиналов.
+import { normalize, versionTags } from '../main/resolver/match';
+import type { AlbumHit } from '../main/artist/ytmArtist';
+import type { ArtistOption } from '../main/artist/types';
+import type { Candidate } from '../main/resolver/types';
+import { artistRefsOf } from './artistNames';
+
+export type BestResult = { kind: 'artist'; artist: ArtistOption } | { kind: 'song'; song: Candidate } | null;
+
+export interface RankedSearch {
+  best: BestResult;
+  /** Лучшие песни рядом с лучшим результатом (до 5). */
+  top: Candidate[];
+  /** Остальные песни, лучшие выше. */
+  rest: Candidate[];
+  artists: ArtistOption[];
+  albums: AlbumHit[];
+}
+
+/** Сколько песен показывать рядом с лучшим результатом. */
+export const TOP_SONGS = 5;
+/**
+ * Артист с именем ровно как запрос, но меньше стольких подписчиков, уступает песне с таким же названием:
+ * по запросу "poster boy" нужна песня 2hollis, а не никому не известный артист Poster Boy (177 подписчиков).
+ */
+const SMALL_ARTIST = 50_000;
+
+const words = (s: string) => normalize(s).split(' ').filter(Boolean);
+
+/** Название без "feat. X", скобок и тире с артистом в начале (SoundCloud: "Артист - Песня"). */
+function cleanTitle(c: Candidate): string {
+  let t = c.title.replace(/[([]\s*(feat\.?|ft\.?|featuring|with)\s[^)\]]*[)\]]/gi, ' ').replace(/\s(feat\.?|ft\.?)\s.*$/i, ' ');
+  const dash = t.split(/\s+[-–—]\s+/);
+  if (c.source === 'soundcloud' && dash.length >= 2) t = dash.slice(1).join(' ');
+  return normalize(t.replace(/[([][^)\]]*[)\]]/g, ' '));
+}
+
+export interface SongScore {
+  song: Candidate;
+  score: number;
+  /** Имя одного из артистов песни совпало с запросом целиком. */
+  artistExact: boolean;
+  /** Название песни совпало с запросом (или с запросом без имени артиста). */
+  titleExact: boolean;
+}
+
+/** Насколько песня подходит к запросу. */
+export function scoreSong(query: string, c: Candidate, index: number): SongScore {
+  const q = normalize(query);
+  const qWords = new Set(words(query));
+  const names = artistRefsOf(c).map((a) => normalize(a.name));
+  const title = cleanTitle(c);
+  const artistExact = names.some((n) => n === q);
+  // Все слова имени артиста есть в запросе ("pharaoh дико например")
+  const artistInQuery = names.some((n) => n && n.split(' ').every((w) => qWords.has(w)));
+  // Запрос без слов артиста: то, что осталось, должно быть названием
+  const artistWords = new Set(names.flatMap((n) => n.split(' ')));
+  const rest = [...qWords].filter((w) => !artistInQuery || !artistWords.has(w)).join(' ');
+  const titleExact = !!title && (title === q || (artistInQuery && !!rest && title === rest));
+  const tWords = title.split(' ').filter(Boolean);
+  const titleCover = tWords.length ? tWords.filter((w) => qWords.has(w)).length / tWords.length : 0;
+  const queryInTitle = [...qWords].filter((w) => tWords.includes(w)).length / Math.max(1, qWords.size);
+
+  let score = 0;
+  if (artistExact) score += 4;
+  else if (artistInQuery) score += 2.5;
+  if (titleExact) score += 4;
+  else score += 1.5 * titleCover * queryInTitle;
+  // Не оригинал (ремикс, ускоренная, live...), если человек сам не просил такую версию
+  const wantVersion = versionTags(query).length > 0;
+  if (!wantVersion && versionTags(c.title).length) score -= 3;
+  // Слова запроса только в названии, а исполнитель другой: "Zero Pharaoh" от чужого артиста ниже
+  if (!artistExact && !artistInQuery && !titleExact) score -= 1;
+  if (c.source === 'ytmusic') score += 0.3; // официальный каталог выше перезаливов SoundCloud
+  return { song: c, score: score - index * 0.01, artistExact, titleExact };
+}
+
+/** Похожесть имени артиста на запрос: 1 = одно и то же. */
+function nameMatch(query: string, name: string): number {
+  const q = normalize(query);
+  const n = normalize(name);
+  if (!q || !n) return 0;
+  if (q === n) return 1;
+  if (q.replace(/ /g, '') === n.replace(/ /g, '')) return 0.95; // "9 mice" и "9mice"
+  const qw = new Set(q.split(' '));
+  const nw = n.split(' ');
+  return nw.every((w) => qw.has(w)) ? 0.6 : 0;
+}
+
+/** Одна и та же песня из двух источников (или дважды в одном): оставляем лучшую по баллу. */
+function dedupe(list: SongScore[]): SongScore[] {
+  const seen = new Set<string>();
+  return list.filter((s) => {
+    const k = `${cleanTitle(s.song)}|${normalize(artistRefsOf(s.song)[0]?.name ?? s.song.artist)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+export function rankSearch(query: string, songs: Candidate[], artists: ArtistOption[], albums: AlbumHit[]): RankedSearch {
+  const scored = dedupe(songs.map((c, i) => scoreSong(query, c, i)).sort((a, b) => b.score - a.score));
+  // Артисты: точное совпадение имени первым (если таких несколько, у кого больше подписчиков)
+  const rankedArtists = artists
+    .map((a, i) => ({ a, m: nameMatch(query, a.name), i }))
+    .sort((x, y) => y.m - x.m || (y.m >= 0.95 ? y.a.audienceCount - x.a.audienceCount : 0) || x.i - y.i);
+  const topArtist = rankedArtists[0];
+  const bestSong = scored[0];
+
+  let best: BestResult = null;
+  const exactSong = scored.find((s) => s.titleExact && !s.artistExact);
+  if (topArtist && topArtist.m >= 0.95 && !(exactSong && topArtist.a.audienceCount < SMALL_ARTIST)) {
+    // Запрос ровно имя артиста: он и есть лучший результат (кроме совсем маленьких, см. SMALL_ARTIST)
+    best = { kind: 'artist', artist: topArtist.a };
+  } else if (exactSong && exactSong.song.source === 'ytmusic') {
+    best = { kind: 'song', song: exactSong.song };
+  } else if (bestSong && (bestSong.titleExact || bestSong.score >= 4)) {
+    best = { kind: 'song', song: bestSong.song };
+  } else if (topArtist && topArtist.m >= 0.6) {
+    best = { kind: 'artist', artist: topArtist.a };
+  } else if (bestSong) {
+    best = { kind: 'song', song: bestSong.song };
+  } else if (topArtist) {
+    best = { kind: 'artist', artist: topArtist.a };
+  }
+
+  // Рядом с артистом: его песни из выдачи; рядом с песней: лучшие песни
+  let topScored: SongScore[];
+  if (best?.kind === 'artist') {
+    const n = normalize(best.artist.name);
+    topScored = scored.filter((s) => artistRefsOf(s.song).some((a) => normalize(a.name) === n || (best.kind === 'artist' && a.ytId === best.artist.ytId)));
+    topScored = topScored.filter((s) => s.score > 0).slice(0, TOP_SONGS);
+  } else if (best?.kind === 'song') {
+    // Рядом с песней: сначала другие песни того же исполнителя, потом остальные по баллу
+    const own = normalize(artistRefsOf(best.song)[0]?.name ?? '');
+    const isOwn = (s: SongScore) => artistRefsOf(s.song).some((a) => normalize(a.name) === own);
+    topScored = [...scored.filter(isOwn), ...scored.filter((s) => !isOwn(s))].slice(0, TOP_SONGS);
+  } else {
+    topScored = scored.slice(0, TOP_SONGS);
+  }
+  const topSet = new Set(topScored.map((s) => s.song));
+  // Альбомы лучшего артиста первыми
+  const bestName = best?.kind === 'artist' ? normalize(best.artist.name) : best?.kind === 'song' ? normalize(artistRefsOf(best.song)[0]?.name ?? '') : '';
+  const albumsSorted = albums
+    .map((a, i) => ({ a, own: bestName && normalize(a.artist).split(' ').join(' ').includes(bestName) ? 1 : 0, i }))
+    .sort((x, y) => y.own - x.own || x.i - y.i)
+    .map((x) => x.a);
+  return {
+    best,
+    top: topScored.map((s) => s.song),
+    rest: scored.filter((s) => !topSet.has(s.song)).map((s) => s.song),
+    artists: rankedArtists.map((x) => x.a),
+    albums: albumsSorted,
+  };
+}

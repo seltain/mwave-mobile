@@ -1,0 +1,86 @@
+// Копия из проекта ПК: music-circle-v2/src/main/radio.ts (scripts/sync-pc.mjs). Не править здесь.
+// "Бесконечная музыка": похожие песни для продолжения очереди.
+// Источник: подборка-радио YouTube Music по песне (как "радио" на сайте YouTube Music).
+// Если радио не получилось, берём популярные песни того же артиста.
+import { songKey } from './artist/logic.js';
+import { normalize, versionTags } from './resolver/match.js';
+import { artistsFromRuns, bestThumb, findAll, parseClock, ytmCall, type Run } from './resolver/providers/innertube.js';
+import type { Candidate, FetchFn } from './resolver/types.js';
+
+/** Сколько песен добавлять за раз. */
+export const RADIO_BATCH = 15;
+
+const text = (runs?: Run[]) => (runs ?? []).map((r) => r.text).join('');
+
+/** Подборка-радио YouTube Music по песне (обычно около 50 песен, первая это сама песня). */
+export async function getRadio(fetchFn: FetchFn, videoId: string): Promise<Candidate[]> {
+  const data = await ytmCall(fetchFn, 'next', {
+    videoId,
+    playlistId: `RDAMVM${videoId}`,
+    isAudioOnly: true,
+    params: 'wAEB', // режим "радио"
+  });
+  const out: Candidate[] = [];
+  for (const it of findAll<{
+    videoId?: string;
+    title?: { runs?: Run[] };
+    longBylineText?: { runs?: Run[] };
+    lengthText?: { runs?: Run[] };
+    thumbnail?: { thumbnails?: { url: string }[] };
+  }>(data, 'playlistPanelVideoRenderer')) {
+    if (!it.videoId) continue;
+    const by = it.longBylineText?.runs ?? [];
+    let artists = artistsFromRuns(by);
+    if (!artists.length && by[0]) artists = [{ name: by[0].text }];
+    out.push({
+      source: 'ytmusic',
+      id: it.videoId,
+      title: text(it.title?.runs),
+      artist: artists.map((a) => a.name).join(', '),
+      artists,
+      duration: parseClock(text(it.lengthText?.runs)),
+      url: `https://music.youtube.com/watch?v=${it.videoId}`,
+      thumbnail: bestThumb(it.thumbnail),
+    });
+  }
+  return out;
+}
+
+/** Песня, которую надо пропустить: уже в очереди или недавно звучала. */
+export interface SkipList {
+  /** Ключи "источник:id". */
+  keys: Set<string>;
+  /** "артист|название" в упрощённом виде: та же песня может прийти под другим id. */
+  songs: Set<string>;
+}
+
+export const plainSong = (c: Candidate) => `${normalize(c.artist.split(',')[0])}|${songKey(c, c.artist.split(',')[0])}`;
+
+export function skipListOf(tracks: Candidate[]): SkipList {
+  return { keys: new Set(tracks.map((c) => `${c.source}:${c.id}`)), songs: new Set(tracks.map(plainSong)) };
+}
+
+/**
+ * Отбор песен для продолжения очереди:
+ * без самой исходной песни, без ремиксов/ускоренных/замедленных версий (общая проверка versionTags),
+ * без того, что уже есть в очереди или звучало недавно, без повторов внутри подборки.
+ */
+export function pickRadio(seed: Candidate, candidates: Candidate[], skip: SkipList, limit = RADIO_BATCH): Candidate[] {
+  const seenKeys = new Set(skip.keys);
+  const seenSongs = new Set(skip.songs);
+  seenKeys.add(`${seed.source}:${seed.id}`);
+  seenSongs.add(plainSong(seed));
+  const out: Candidate[] = [];
+  for (const c of candidates) {
+    if (out.length >= limit) break;
+    const key = `${c.source}:${c.id}`;
+    const song = plainSong(c);
+    if (seenKeys.has(key) || seenSongs.has(song)) continue;
+    if (versionTags(c.title).length) continue;
+    if (c.duration !== null && (c.duration < 60 || c.duration > 15 * 60)) continue; // фрагменты и часовые миксы
+    seenKeys.add(key);
+    seenSongs.add(song);
+    out.push(c);
+  }
+  return out;
+}

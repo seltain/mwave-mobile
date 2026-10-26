@@ -1,0 +1,308 @@
+// Копия из проекта ПК: music-circle-v2/src/main/artist/ytmArtist.ts (scripts/sync-pc.mjs). Не править здесь.
+// YouTube Music: поиск артистов, страница артиста, популярные песни, альбом.
+// Тот же публичный веб-API, что и в поиске песен (см. providers/innertube.ts).
+import {
+  artistsFromRuns,
+  bestThumb,
+  columns,
+  findAll,
+  pageTypeOf,
+  parseClock,
+  parseCount,
+  ytmCall,
+  type ListItemRenderer,
+  type Run,
+} from '../resolver/providers/innertube.js';
+import type { Candidate, FetchFn } from '../resolver/types.js';
+import type { AlbumPage, AlbumRef, ArtistOption } from './types.js';
+
+// Параметр фильтра "только артисты" (Artists). Тот же формат, что у фильтра песен.
+const ARTISTS_FILTER = 'EgWKAQIgAWoMEA4QChADEAQQCRAF';
+
+const text = (runs?: Run[]) => (runs ?? []).map((r) => r.text).join('');
+
+/** Песня из строки списка. albumArtist: подставляется, если у строки нет своего артиста (так в альбомах). */
+function songFromItem(m: ListItemRenderer, fallback?: { artist: string; artistId?: string; thumbnail?: string }): Candidate | null {
+  const videoId = m.playlistItemData?.videoId;
+  const { flex, fixed } = columns(m);
+  if (!videoId || !flex[0]?.length) return null;
+  let artists = artistsFromRuns(flex[1] ?? []);
+  if (!artists.length && flex[1]?.length) artists = [{ name: text(flex[1]).split(' • ')[0] }];
+  if (!artists.length && fallback) artists = [{ name: fallback.artist, id: fallback.artistId }];
+  const duration = [...fixed, ...flex.slice(1)].flat().map((r) => parseClock(r.text)).find((d) => d !== null) ?? null;
+  const playsRun = flex.flat().find((r) => /\bplays?\b/i.test(r.text));
+  return {
+    source: 'ytmusic',
+    id: videoId,
+    title: text(flex[0]),
+    artist: artists.map((a) => a.name).join(', '),
+    artists,
+    duration,
+    url: `https://music.youtube.com/watch?v=${videoId}`,
+    thumbnail: bestThumb(m.thumbnail?.musicThumbnailRenderer?.thumbnail) ?? fallback?.thumbnail,
+    plays: parseCount(playsRun?.text) ?? undefined,
+  };
+}
+
+/** Поиск артистов по имени. */
+export async function searchArtists(fetchFn: FetchFn, name: string): Promise<ArtistOption[]> {
+  const data = await ytmCall(fetchFn, 'search', { query: name, params: ARTISTS_FILTER });
+  const shelf = findAll<{ contents?: { musicResponsiveListItemRenderer?: ListItemRenderer }[] }>(data, 'musicShelfRenderer')[0];
+  const out: ArtistOption[] = [];
+  for (const it of shelf?.contents ?? []) {
+    const m = it.musicResponsiveListItemRenderer;
+    const id = m?.navigationEndpoint?.browseEndpoint?.browseId;
+    if (!m || !id?.startsWith('UC')) continue;
+    const { flex } = columns(m);
+    // Вторая колонка: "Artist • 133K subscribers"
+    const parts = text(flex[1]).split(' • ');
+    const audience = parts.slice(1).join(' • ');
+    out.push({
+      ytId: id,
+      name: text(flex[0]),
+      thumbnail: bestThumb(m.thumbnail?.musicThumbnailRenderer?.thumbnail),
+      audience,
+      audienceCount: parseCount(audience) ?? 0,
+    });
+  }
+  return out;
+}
+
+/** Ссылка YouTube Music на полный список (например, "все альбомы"). */
+export interface MoreEndpoint {
+  browseId: string;
+  params?: string;
+}
+
+// Параметр фильтра "только альбомы" (Albums), тот же формат.
+const ALBUMS_FILTER = 'EgWKAQIYAWoMEA4QChADEAQQCRAF';
+
+/** Альбом из поиска: плитка альбома и его артист. */
+export type AlbumHit = AlbumRef & { artist: string; artistId?: string };
+
+/** Поиск альбомов по запросу (для экрана поиска). */
+export async function searchAlbums(fetchFn: FetchFn, query: string, signal?: AbortSignal): Promise<AlbumHit[]> {
+  const data = await ytmCall(fetchFn, 'search', { query, params: ALBUMS_FILTER }, signal);
+  const shelf = findAll<{ contents?: { musicResponsiveListItemRenderer?: ListItemRenderer }[] }>(data, 'musicShelfRenderer')[0];
+  const out: AlbumHit[] = [];
+  for (const it of shelf?.contents ?? []) {
+    const m = it.musicResponsiveListItemRenderer;
+    const id = m?.navigationEndpoint?.browseEndpoint?.browseId;
+    if (!m || !id?.startsWith('MPRE')) continue;
+    const { flex } = columns(m);
+    // Вторая колонка: "Album • Артист • 2019" или "Single • Артист • 2024"
+    const info = flex[1] ?? [];
+    const artists = artistsFromRuns(info);
+    const kindText = text(info).split(' • ')[0].toLowerCase();
+    out.push({
+      id,
+      title: text(flex[0]),
+      year: /\b(19|20)\d{2}\b/.exec(text(info))?.[0],
+      thumbnail: bestThumb(m.thumbnail?.musicThumbnailRenderer?.thumbnail),
+      kind: kindText.startsWith('album') ? 'album' : 'single',
+      artist: artists.map((a) => a.name).join(', ') || text(info).split(' • ')[1] || '',
+      artistId: artists[0]?.id,
+    });
+  }
+  return out;
+}
+
+export interface YtArtistPage {
+  ytId: string;
+  name: string;
+  thumbnail?: string;
+  audience?: string;
+  /** Все популярные песни первой страницы (YouTube Music отдаёт до 100 за раз). */
+  songs: Candidate[];
+  /** Метка продолжения списка популярных песен (следующие страницы), если есть. */
+  songsNext?: string;
+  /** Альбомы и синглы, которые видны на странице артиста (по 10 штук). */
+  albums: AlbumRef[];
+  /** Ссылки на полные списки альбомов и синглов. */
+  albumsMore: Partial<Record<AlbumRef['kind'], MoreEndpoint>>;
+}
+
+/** Песни из ответа YouTube Music и метка продолжения, если оно есть. */
+function songsAndNext(data: unknown): { songs: Candidate[]; next?: string } {
+  const songs = findAll<ListItemRenderer>(data, 'musicResponsiveListItemRenderer')
+    .map((m) => songFromItem(m))
+    .filter((c): c is Candidate => !!c);
+  const next = findAll<{ token?: string }>(data, 'continuationCommand')[0]?.token;
+  return { songs, next };
+}
+
+/** Следующая страница популярных песен (по метке продолжения). */
+export async function getMoreSongs(fetchFn: FetchFn, token: string): Promise<{ songs: Candidate[]; next?: string }> {
+  return songsAndNext(await ytmCall(fetchFn, 'browse', { continuation: token }));
+}
+
+/** Плитки альбомов из ответа YouTube Music. */
+function albumsFrom(data: unknown, kind: AlbumRef['kind']): AlbumRef[] {
+  const out: AlbumRef[] = [];
+  for (const it of findAll<{
+    title?: { runs?: Run[] };
+    subtitle?: { runs?: Run[] };
+    navigationEndpoint?: { browseEndpoint?: { browseId?: string } };
+    thumbnailRenderer?: { musicThumbnailRenderer?: { thumbnail?: { thumbnails?: { url: string }[] } } };
+  }>(data, 'musicTwoRowItemRenderer')) {
+    const id = it.navigationEndpoint?.browseEndpoint?.browseId;
+    if (!id?.startsWith('MPRE')) continue;
+    out.push({
+      id,
+      title: text(it.title?.runs),
+      year: /\b(19|20)\d{2}\b/.exec(text(it.subtitle?.runs))?.[0],
+      thumbnail: bestThumb(it.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail),
+      kind,
+    });
+  }
+  return out;
+}
+
+/** Полный список альбомов или синглов артиста. */
+export async function getAllAlbums(fetchFn: FetchFn, ep: MoreEndpoint, kind: AlbumRef['kind']): Promise<AlbumRef[]> {
+  return albumsFrom(await ytmCall(fetchFn, 'browse', { browseId: ep.browseId, ...(ep.params ? { params: ep.params } : {}) }), kind);
+}
+
+interface Shelf {
+  title?: { runs?: Run[] };
+  contents?: { musicResponsiveListItemRenderer?: ListItemRenderer }[];
+  bottomEndpoint?: { browseEndpoint?: { browseId?: string } };
+}
+interface BrowseLink {
+  navigationEndpoint?: { browseEndpoint?: { browseId?: string; params?: string } };
+}
+interface Carousel {
+  header?: {
+    musicCarouselShelfBasicHeaderRenderer?: {
+      title?: { runs?: (Run & BrowseLink)[] };
+      moreContentButton?: { buttonRenderer?: BrowseLink };
+    };
+  };
+  contents?: {
+    musicTwoRowItemRenderer?: {
+      title?: { runs?: Run[] };
+      subtitle?: { runs?: Run[] };
+      navigationEndpoint?: { browseEndpoint?: { browseId?: string } };
+      thumbnailRenderer?: { musicThumbnailRenderer?: { thumbnail?: { thumbnails?: { url: string }[] } } };
+    };
+  }[];
+}
+
+/** Страница артиста: шапка, популярные песни (первая страница, до 100), альбомы и синглы. */
+export async function getArtistPage(fetchFn: FetchFn, ytId: string): Promise<YtArtistPage> {
+  const data = (await ytmCall(fetchFn, 'browse', { browseId: ytId })) as Record<string, unknown>;
+  const header =
+    (findAll<Record<string, unknown>>(data.header, 'musicImmersiveHeaderRenderer')[0] ??
+      findAll<Record<string, unknown>>(data.header, 'musicVisualHeaderRenderer')[0] ??
+      {}) as {
+      title?: { runs?: Run[] };
+      thumbnail?: { musicThumbnailRenderer?: { thumbnail?: { thumbnails?: { url: string }[] } } };
+      foregroundThumbnail?: { musicThumbnailRenderer?: { thumbnail?: { thumbnails?: { url: string }[] } } };
+      subscriptionButton?: { subscribeButtonRenderer?: { subscriberCountText?: { runs?: Run[] } } };
+      monthlyListenerCount?: { runs?: Run[] };
+    };
+  const name = text(header.title?.runs);
+  if (!name) throw new Error('страница артиста без имени');
+  const subs = text(header.subscriptionButton?.subscribeButtonRenderer?.subscriberCountText?.runs);
+  const monthly = text(header.monthlyListenerCount?.runs);
+
+  const sections = findAll<unknown[]>(data.contents, 'sectionListRenderer')
+    .map((s) => (s as { contents?: unknown[] }).contents ?? [])
+    .flat() as Record<string, unknown>[];
+
+  // Популярные песни: список на странице (5 шт.) или полный список по ссылке "все"
+  let songs: Candidate[] = [];
+  let songsNext: string | undefined;
+  const songShelf = sections.map((s) => s.musicShelfRenderer as Shelf | undefined).find(Boolean);
+  if (songShelf) {
+    songs = (songShelf.contents ?? [])
+      .map((c) => c.musicResponsiveListItemRenderer && songFromItem(c.musicResponsiveListItemRenderer))
+      .filter((c): c is Candidate => !!c);
+    const moreId =
+      songShelf.bottomEndpoint?.browseEndpoint?.browseId ??
+      songShelf.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId;
+    if (moreId) {
+      try {
+        const full = songsAndNext(await ytmCall(fetchFn, 'browse', { browseId: moreId }));
+        if (full.songs.length > songs.length) {
+          songs = full.songs;
+          songsNext = full.next;
+        }
+      } catch {
+        // полный список не обязателен, хватит первых песен со страницы
+      }
+    }
+  }
+
+  // Альбомы и синглы: карусели, где элементы ведут на страницы альбомов
+  const albums: AlbumRef[] = [];
+  const albumsMore: YtArtistPage['albumsMore'] = {};
+  for (const s of sections) {
+    const car = s.musicCarouselShelfRenderer as Carousel | undefined;
+    if (!car) continue;
+    const title = text(car.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs).toLowerCase();
+    // "Appears on"/"Featured on" это чужие альбомы и плейлисты, пропускаем
+    if (!/^(albums|singles|singles & eps|eps)$/.test(title)) continue;
+    const kind = title.startsWith('albums') ? 'album' : 'single';
+    // Ссылка "Ещё" ведёт на полный список этого раздела
+    const h = car.header?.musicCarouselShelfBasicHeaderRenderer;
+    const more =
+      h?.moreContentButton?.buttonRenderer?.navigationEndpoint?.browseEndpoint ??
+      h?.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint;
+    if (more?.browseId) albumsMore[kind] = { browseId: more.browseId, params: more.params };
+    for (const c of car.contents ?? []) {
+      const it = c.musicTwoRowItemRenderer;
+      const id = it?.navigationEndpoint?.browseEndpoint?.browseId;
+      if (!it || !id?.startsWith('MPRE')) continue;
+      const sub = text(it.subtitle?.runs);
+      albums.push({
+        id,
+        title: text(it.title?.runs),
+        year: /\b(19|20)\d{2}\b/.exec(sub)?.[0],
+        thumbnail: bestThumb(it.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail),
+        kind,
+      });
+    }
+  }
+
+  return {
+    ytId,
+    name,
+    thumbnail:
+      bestThumb(header.thumbnail?.musicThumbnailRenderer?.thumbnail) ??
+      bestThumb(header.foregroundThumbnail?.musicThumbnailRenderer?.thumbnail),
+    audience: subs ? `${subs} subscribers` : monthly || undefined,
+    songs,
+    songsNext,
+    albums,
+    albumsMore,
+  };
+}
+
+/** Альбом: шапка и список песен. */
+export async function getAlbum(fetchFn: FetchFn, id: string): Promise<AlbumPage> {
+  const data = await ytmCall(fetchFn, 'browse', { browseId: id });
+  const header = findAll<{
+    title?: { runs?: Run[] };
+    subtitle?: { runs?: Run[] };
+    straplineTextOne?: { runs?: Run[] };
+    thumbnail?: { musicThumbnailRenderer?: { thumbnail?: { thumbnails?: { url: string }[] } } };
+  }>(data, 'musicResponsiveHeaderRenderer')[0];
+  if (!header) throw new Error('страница альбома без шапки');
+  const artistRun = header.straplineTextOne?.runs?.find((r) => pageTypeOf(r) === 'MUSIC_PAGE_TYPE_ARTIST');
+  const artist = text(header.straplineTextOne?.runs);
+  const thumbnail = bestThumb(header.thumbnail?.musicThumbnailRenderer?.thumbnail);
+  const fallback = { artist, artistId: artistRun?.navigationEndpoint?.browseEndpoint?.browseId, thumbnail };
+  const tracks = findAll<ListItemRenderer>(data, 'musicResponsiveListItemRenderer')
+    .map((m) => songFromItem(m, fallback))
+    .filter((c): c is Candidate => !!c);
+  return {
+    id,
+    title: text(header.title?.runs),
+    artist,
+    artistId: fallback.artistId,
+    year: /\b(19|20)\d{2}\b/.exec(text(header.subtitle?.runs))?.[0],
+    thumbnail,
+    tracks,
+  };
+}

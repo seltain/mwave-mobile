@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "mwave",
+    "slug": "mwave-mobile",
+    "version": "1.0.0",
+    "scheme": "mwave",
+    "platforms": [
+      "ios"
+    ],
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "backgroundColor": "#0A0A0B",
+    "newArchEnabled": true,
+    "jsEngine": "hermes",
+    "updates": {
+      "enabled": false
+    },
+    "ios": {
+      "bundleIdentifier": "app.mwave.mobile",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "infoPlist": {
+        "CFBundleDisplayName": "mwave",
+        "UIRequiredDeviceCapabilities": [
+          "arm64"
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false
+        }
+      ],
+      "expo-sqlite",
+      "expo-font",
+      "expo-asset"
+    ]
+  }
+}

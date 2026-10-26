@@ -1,0 +1,172 @@
+[
+ {
+  "q": "Kai Angel andy warhol",
+  "yt": {
+   "ok": true,
+   "link": "3.8",
+   "first": "0.8",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "2.9"
+  },
+  "sc": {
+   "ok": true,
+   "link": "2.8",
+   "first": "0.8",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "PHARAOH Дико например",
+  "yt": {
+   "ok": true,
+   "link": "3.6",
+   "first": "0.7",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "2.9"
+  },
+  "sc": {
+   "ok": true,
+   "link": "2.9",
+   "first": "0.8",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "Kanye West Flashing Lights",
+  "yt": {
+   "ok": true,
+   "link": "4.2",
+   "first": "0.8",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "3.6"
+  },
+  "sc": {
+   "ok": true,
+   "link": "2.6",
+   "first": "0.7",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "2hollis poster boy",
+  "yt": {
+   "ok": true,
+   "link": "3.4",
+   "first": "0.8",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "2.1"
+  },
+  "sc": {
+   "ok": true,
+   "link": "2.9",
+   "first": "0.8",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "Playboi Carti Magnolia",
+  "yt": {
+   "ok": true,
+   "link": "3.8",
+   "first": "0.8",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "3.3"
+  },
+  "sc": {
+   "ok": true,
+   "link": "2.7",
+   "first": "0.8",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "SALUKI Запрещаю забывать",
+  "yt": {
+   "ok": true,
+   "link": "3.3",
+   "first": "0.8",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "2.7"
+  },
+  "sc": {
+   "ok": true,
+   "link": "2.7",
+   "first": "0.7",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "Boulevard Depo 5 минут назад",
+  "yt": {
+   "ok": true,
+   "link": "3.5",
+   "first": "0.8",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "3.9"
+  },
+  "sc": {
+   "ok": true,
+   "link": "2.8",
+   "first": "0.8",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "Kai Angel Shh!",
+  "yt": {
+   "ok": true,
+   "link": "3.4",
+   "first": "0.7",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "2.2"
+  },
+  "sc": {
+   "ok": true,
+   "link": "2.7",
+   "first": "0.8",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "PHARAOH Родная Душа",
+  "yt": {
+   "ok": true,
+   "link": "3.3",
+   "first": "0.8",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "2.2"
+  },
+  "sc": {
+   "ok": true,
+   "link": "3.0",
+   "first": "0.8",
+   "audio": "aac 44100"
+  }
+ },
+ {
+  "q": "Кино Группа крови",
+  "yt": {
+   "ok": true,
+   "link": "3.3",
+   "first": "0.8",
+   "audio": "opus 48000",
+   "seek": true,
+   "mb": "4.4"
+  },
+  "sc": {
+   "ok": true,
+   "link": "3.0",
+   "first": "0.8",
+   "audio": "aac 44100"
+  }
+ }
+]

@@ -1,0 +1,11 @@
+# Раз в сутки, в случайный момент ночного часа (чтобы не совпадать с другими задачами).
+[Unit]
+Description=mwave: обновление yt-dlp раз в сутки
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

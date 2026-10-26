@@ -1,0 +1,192 @@
+// Копия из проекта ПК: music-circle-v2/src/main/resolver/match.ts (scripts/sync-pc.mjs). Не править здесь.
+// Сопоставление: какой из найденных кандидатов и есть нужный трек.
+// Скоринг названия и артиста, штраф за неоригинальные версии, сверка длительности.
+import type { Candidate, WantedTrack } from './types.js';
+
+/** Допуск по длительности, секунды. */
+export const DURATION_TOLERANCE = 3;
+/** Ниже этого балла кандидат не считается совпадением. */
+export const MIN_SCORE = 0.6;
+/** Штраф за неоригинальную версию (remix, live, sped up...). */
+const VERSION_PENALTY = 0.5;
+
+// Слова, которые означают "это не оригинал". Если такое слово есть в искомом
+// названии (пользователь сам хочет ремикс), штрафа нет.
+// Для кириллицы \b не работает, поэтому там шаблоны без \b.
+const VERSION_WORDS: [RegExp, string][] = [
+  [/\bremix(ed)?\b|ремикс/, 'remix'],
+  [/\bedit\b/, 'edit'],
+  [/\blive\b|живое выступление|концерт/, 'live'],
+  [/\bsped\s*up\b|\bspeed\s*up\b|\bspedup\b/, 'sped up'],
+  [/\bslowed\b|\breverb\b/, 'slowed/reverb'],
+  [/\bnightcore\b/, 'nightcore'],
+  [/\bcover\b|кавер/, 'cover'],
+  [/\bkaraoke\b|караоке|\bminus\b|минус/, 'karaoke'],
+  [/\binstrumental\b|инструментал/, 'instrumental'],
+  [/\bacoustic\b|акустик/, 'acoustic'],
+  [/\b8d\b/, '8d'],
+  [/\bbass\s*boost(ed)?\b/, 'bass boosted'],
+  [/\bextended\b/, 'extended'],
+  [/\bmash\s*up\b|\bmashup\b/, 'mashup'],
+  [/\bbootleg\b|\bremake\b|\brework\b|\bflip\b|\bvip\b/, 'rework'],
+  [/\bdemo\b/, 'demo'],
+  [/\blo\s*fi\b|\blofi\b|\bphonk\b/, 'lofi/phonk'],
+  [/\bmix\b/, 'mix'],
+  [/\bversion\b|версия/, 'version'],
+];
+
+/** Нижний регистр, без диакритики (ё -> е), только буквы и цифры через пробел. */
+export function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/** Убирает "feat. X" / "ft. X" / "(with X)" из названия. */
+function stripFeat(s: string): string {
+  return s
+    .replace(/[([]\s*(feat\.?|ft\.?|featuring|with)\s[^)\]]*[)\]]/gi, ' ')
+    .replace(/\s(feat\.?|ft\.?|featuring)\s.*$/i, ' ');
+}
+
+/** Название без скобок и мусора вроде "Official Audio". */
+function baseTitle(s: string): string {
+  return normalize(
+    stripFeat(s)
+      .replace(/[([][^)\]]*[)\]]/g, ' ')
+      .replace(/official\s*(audio|video|music video|lyric video)|lyrics?|\bhd\b|\bhq\b|\b4k\b/gi, ' '),
+  );
+}
+
+function tokens(s: string): Set<string> {
+  return new Set(normalize(s).split(' ').filter(Boolean));
+}
+
+/** Коэффициент Дайса по словам: 1 = одинаковые наборы слов, 0 = ничего общего. */
+export function similarity(a: string, b: string): number {
+  const ta = tokens(a);
+  const tb = tokens(b);
+  if (!ta.size || !tb.size) return 0;
+  let common = 0;
+  for (const t of ta) if (tb.has(t)) common++;
+  return (2 * common) / (ta.size + tb.size);
+}
+
+/** Какая доля слов искомого артиста встречается в тексте кандидата. */
+function artistCoverage(wantedArtist: string, text: string): number {
+  const wa = tokens(wantedArtist);
+  const ct = tokens(text);
+  if (!wa.size) return 0;
+  let hit = 0;
+  for (const t of wa) if (ct.has(t)) hit++;
+  return hit / wa.size;
+}
+
+/** Слова неоригинальных версий в строке. */
+export function versionTags(s: string): string[] {
+  const n = normalize(s);
+  return VERSION_WORDS.filter(([re]) => re.test(n)).map(([, name]) => name);
+}
+
+/**
+ * На SoundCloud название часто "Артист - Трек" (или "Трек - Артист"),
+ * а артистом записан тот, кто загрузил. Разбираем такие названия.
+ */
+function splitArtistTitle(c: Candidate, wanted: WantedTrack): { artistText: string; titleText: string } {
+  const parts = c.title.split(/\s+[-–—|]\s+/);
+  if (parts.length >= 2) {
+    const left = parts[0];
+    const right = parts.slice(1).join(' ');
+    if (artistCoverage(wanted.artist, left) >= 0.5) return { artistText: `${left} ${c.artist}`, titleText: right };
+    if (artistCoverage(wanted.artist, right) >= 0.5) return { artistText: `${right} ${c.artist}`, titleText: left };
+  }
+  return { artistText: c.artist, titleText: c.title };
+}
+
+export interface ScoredCandidate {
+  candidate: Candidate;
+  /** Итоговый балл, примерно от 0 до 1.15. */
+  score: number;
+  titleScore: number;
+  artistScore: number;
+  /** Найденные признаки неоригинальной версии. */
+  versions: string[];
+  /** Разница длительности с эталоном, секунды (null, если сравнить нельзя). */
+  durationDiff: number | null;
+  /** Причина отказа или null, если кандидат подходит. */
+  rejected: string | null;
+}
+
+/** Оценивает одного кандидата. */
+export function scoreCandidate(c: Candidate, wanted: WantedTrack): ScoredCandidate {
+  const { artistText, titleText } = splitArtistTitle(c, wanted);
+  const titleScore = similarity(baseTitle(wanted.title), baseTitle(titleText));
+  const artistScore = artistCoverage(wanted.artist, `${artistText} ${titleText}`);
+
+  const wantedTags = new Set(versionTags(wanted.title));
+  const versions = versionTags(c.title).filter((v) => !wantedTags.has(v));
+
+  let score = 0.6 * titleScore + 0.4 * artistScore;
+  if (versions.length) score -= VERSION_PENALTY;
+  // "feat. X", которого нет в запросе, часто отдельная версия трека: небольшой штраф, не отказ
+  const featRe = /\b(feat\.?|ft\.?|featuring)\s/i;
+  if (featRe.test(c.title) && !featRe.test(wanted.title)) score -= 0.1;
+  // Небольшой бонус официальным источникам: каталог YouTube Music
+  // или загрузка с аккаунта самого артиста на SoundCloud
+  if (c.source === 'ytmusic') score += 0.05;
+  if (c.source === 'soundcloud' && normalize(c.artist) === normalize(wanted.artist)) score += 0.05;
+
+  let durationDiff: number | null = null;
+  let rejected: string | null = null;
+  if (wanted.duration && c.duration) {
+    durationDiff = Math.abs(wanted.duration - c.duration);
+    if (durationDiff <= DURATION_TOLERANCE) score += 0.1;
+    else rejected = `длительность ${Math.round(c.duration)}с вместо ${Math.round(wanted.duration)}с`;
+  }
+  if (!rejected && versions.length) rejected = `не оригинал: ${versions.join(', ')}`;
+  if (!rejected && score < MIN_SCORE) rejected = `мало совпадений (балл ${score.toFixed(2)})`;
+
+  return { candidate: c, score, titleScore, artistScore, versions, durationDiff, rejected };
+}
+
+/** Все кандидаты по убыванию: сначала подходящие, внутри по баллу. */
+export function rankCandidates(candidates: Candidate[], wanted: WantedTrack): ScoredCandidate[] {
+  return candidates
+    .map((c) => scoreCandidate(c, wanted))
+    .sort((a, b) => Number(!!a.rejected) - Number(!!b.rejected) || b.score - a.score);
+}
+
+/** Лучший подходящий кандидат или null. */
+export function match(candidates: Candidate[], wanted: WantedTrack): ScoredCandidate | null {
+  const best = rankCandidates(candidates, wanted)[0];
+  return best && !best.rejected ? best : null;
+}
+
+/**
+ * Если эталонной длительности нет, берём её у лучшего совпадения в YouTube Music
+ * (там официальный каталог). Так длительность всё равно помогает отсеять
+ * неправильные версии на SoundCloud.
+ */
+export function inferReferenceDuration(candidates: Candidate[], wanted: WantedTrack): number | null {
+  const official = rankCandidates(
+    candidates.filter((c) => c.source === 'ytmusic' && c.duration),
+    { ...wanted, duration: null },
+  ).find((s) => !s.rejected && s.titleScore >= 0.8 && s.artistScore >= 0.5);
+  return official?.candidate.duration ?? null;
+}
+
+/**
+ * Что искать в других источниках, если выбранный кандидат не играет.
+ * Для SoundCloud разбираем "Артист - Трек" из названия.
+ */
+export function wantedFromCandidate(c: Candidate, keepDuration = true): WantedTrack {
+  const duration = keepDuration ? c.duration : null;
+  const parts = c.title.split(/\s+[-–—]\s+/);
+  if (c.source === 'soundcloud' && parts.length >= 2) {
+    return { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim(), duration };
+  }
+  return { artist: c.artist.split(',')[0].trim(), title: c.title, duration };
+}

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+# Ключ сервиса никогда не кладём в репозиторий
+token
+*.token

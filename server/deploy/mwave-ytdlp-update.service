@@ -1,0 +1,16 @@
+# Обновление yt-dlp в /opt/mwave/bin (yt-dlp сам скачивает новую версию с GitHub и сверяет контрольную сумму).
+[Unit]
+Description=mwave: обновление yt-dlp
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=mwave
+Group=mwave
+Environment=HOME=/opt/mwave XDG_CACHE_HOME=/opt/mwave/cache PATH=/opt/mwave/bin:/usr/bin:/bin
+ExecStart=/opt/mwave/bin/yt-dlp -U
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/mwave
+ProtectHome=yes
+PrivateTmp=yes

@@ -1,0 +1,130 @@
+// Копия из проекта ПК: music-circle-v2/src/renderer/src/queueLogic.ts (scripts/sync-pc.mjs). Не править здесь.
+// Порядок очереди как в обычных музыкальных сервисах, без привязки к звуку (проверяется тестами).
+//
+// Очередь = одно "место" (альбом, плейлист, результаты поиска...) плюс добавленное вручную и волна:
+//   [уже сыгранные] [текущая] [вручную: "Играть следующей" / "Добавить в очередь"] [дальше из места] [волна]
+// Перемешивание меняет только порядок песен места. Выключение возвращает исходный порядок от текущей песни.
+
+/** Откуда песня в очереди: из места, добавлена вручную или подобрана волной. */
+export type ItemKind = 'context' | 'manual' | 'auto';
+export type RepeatMode = 'off' | 'all' | 'one';
+
+export interface QItem {
+  key: string;
+  kind: ItemKind;
+  /** Номер песни в исходном порядке места (для выключения перемешивания); у остальных -1. */
+  ord: number;
+}
+
+export interface QState<T extends QItem> {
+  items: T[];
+  index: number;
+}
+
+export type Rnd = () => number;
+
+/** Перемешивание Фишера-Йетса. */
+export function shuffled<T>(arr: readonly T[], rnd: Rnd = Math.random): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Новое место: песни в исходном порядке, начать с start. При перемешивании выбранная песня первая, остальные случайно. */
+export function startContext<T extends QItem>(items: T[], start: number, shuffle: boolean, rnd: Rnd = Math.random): QState<T> {
+  const s = Math.min(Math.max(0, start), items.length - 1);
+  if (!shuffle) return { items, index: s };
+  const others = items.filter((_, i) => i !== s);
+  return { items: [items[s], ...shuffled(others, rnd)], index: 0 };
+}
+
+const upcoming = <T extends QItem>(st: QState<T>, kind: ItemKind) => st.items.slice(st.index + 1).filter((it) => it.kind === kind);
+
+/** Включить или выключить перемешивание посреди проигрывания. Текущая песня продолжает играть. */
+export function setShuffle<T extends QItem>(st: QState<T>, on: boolean, rnd: Rnd = Math.random): QState<T> {
+  const cur = st.items[st.index];
+  if (!cur) return st;
+  const manual = upcoming(st, 'manual');
+  const auto = upcoming(st, 'auto');
+  const context = st.items.filter((it, i) => it.kind === 'context' && i !== st.index);
+  if (on) {
+    return { items: [cur, ...manual, ...shuffled(context, rnd), ...auto], index: 0 };
+  }
+  const byOrd = (a: T, b: T) => a.ord - b.ord;
+  let before: T[];
+  let after: T[];
+  if (cur.kind === 'context') {
+    before = context.filter((it) => it.ord < cur.ord).sort(byOrd);
+    after = context.filter((it) => it.ord > cur.ord).sort(byOrd);
+  } else {
+    // Играет добавленная вручную или подобранная: место продолжается с того, что ещё не звучало
+    const played = new Set(st.items.slice(0, st.index).map((it) => it.key));
+    before = context.filter((it) => played.has(it.key)).sort(byOrd);
+    after = context.filter((it) => !played.has(it.key)).sort(byOrd);
+  }
+  return { items: [...before, cur, ...manual, ...after, ...auto], index: before.length };
+}
+
+/** "Играть следующей": сразу после текущей, впереди остальных добавленных вручную. */
+export function insertNext<T extends QItem>(st: QState<T>, item: T): QState<T> {
+  if (st.index < 0 || !st.items.length) return { items: [item], index: 0 };
+  const items = [...st.items];
+  items.splice(st.index + 1, 0, item);
+  return { items, index: st.index };
+}
+
+/** "Добавить в очередь": после уже добавленных вручную, но перед продолжением места и волной. */
+export function insertQueued<T extends QItem>(st: QState<T>, item: T): QState<T> {
+  if (st.index < 0 || !st.items.length) return { items: [item], index: 0 };
+  let at = st.index + 1;
+  while (at < st.items.length && st.items[at].kind === 'manual') at++;
+  const items = [...st.items];
+  items.splice(at, 0, item);
+  return { items, index: st.index };
+}
+
+/** Волна: подобранные песни в самый конец. */
+export function appendAuto<T extends QItem>(st: QState<T>, autos: T[]): QState<T> {
+  return { items: [...st.items, ...autos], index: st.index };
+}
+
+/** Убрать ещё не сыгранные песни волны (например, включили повтор). */
+export function dropUpcomingAuto<T extends QItem>(st: QState<T>): QState<T> {
+  return { items: st.items.filter((it, i) => i <= st.index || it.kind !== 'auto'), index: st.index };
+}
+
+/**
+ * Что играть после текущей.
+ * byUser: нажали "вперёд" (повтор одной песни тогда не держит на месте).
+ * Возвращает новую очередь и номер песни, или null, если место закончилось и повтора нет.
+ */
+export function advance<T extends QItem>(
+  st: QState<T>,
+  repeat: RepeatMode,
+  byUser: boolean,
+  shuffle: boolean,
+  rnd: Rnd = Math.random,
+): QState<T> | null {
+  if (st.index < 0 || !st.items.length) return null;
+  if (repeat === 'one' && !byUser) return st;
+  if (st.index + 1 < st.items.length) return { items: st.items, index: st.index + 1 };
+  if (repeat === 'off') return null;
+  // Повтор списка: место с начала (при перемешивании в новом случайном порядке); вручную добавленные уже сыграны
+  const context = st.items.filter((it) => it.kind === 'context').sort((a, b) => a.ord - b.ord);
+  if (!context.length) return { items: st.items, index: 0 };
+  return { items: shuffle ? shuffled(context, rnd) : context, index: 0 };
+}
+
+/** Убрать песню из очереди. Возвращает новую очередь и что делать с текущей. */
+export function removeAt<T extends QItem>(st: QState<T>, i: number): { state: QState<T>; currentRemoved: boolean } {
+  const items = st.items.filter((_, j) => j !== i);
+  if (i < st.index) return { state: { items, index: st.index - 1 }, currentRemoved: false };
+  if (i === st.index) return { state: { items, index: i < items.length ? i : items.length - 1 }, currentRemoved: true };
+  return { state: { items, index: st.index }, currentRemoved: false };
+}
+
+/** Сколько песен после текущей. */
+export const leftAfter = (st: QState<QItem>) => (st.index < 0 ? -1 : st.items.length - st.index - 1);

@@ -1,0 +1,155 @@
+// Копия из проекта ПК: music-circle-v2/src/main/resolver/resolver.ts (scripts/sync-pc.mjs). Не править здесь.
+// Резолвер: собирает поиск по всем источникам, выбирает лучший вариант
+// и пробует получить поток. Если лучший не дал поток, берёт следующий (fallback).
+import { DURATION_TOLERANCE, inferReferenceDuration, match, rankCandidates, type ScoredCandidate } from './match.js';
+import type {
+  Candidate,
+  SearchProvider,
+  Source,
+  StreamInfo,
+  StreamProvider,
+  StreamResult,
+  UnavailableReason,
+  WantedTrack,
+} from './types.js';
+
+/** Балл, после которого дальше искать не нужно (название и артист совпали, длительность в допуске). */
+const CONFIDENT_SCORE = 0.95;
+
+export interface StreamAttempt {
+  candidate: Candidate;
+  ok: boolean;
+  reason?: UnavailableReason;
+  message?: string;
+}
+
+export type ResolveResult =
+  | {
+      status: 'ok';
+      chosen: ScoredCandidate;
+      stream: StreamInfo;
+      referenceDuration: number | null;
+      attempts: StreamAttempt[];
+      ranked: ScoredCandidate[];
+    }
+  | {
+      /** not_found = нет подходящей версии, unavailable = версии есть, но звук не получен */
+      status: 'not_found' | 'unavailable';
+      referenceDuration: number | null;
+      attempts: StreamAttempt[];
+      ranked: ScoredCandidate[];
+      searchErrors: string[];
+    };
+
+export interface ResolverOptions {
+  /** Сколько подходящих кандидатов максимум пробовать для получения потока. */
+  maxStreamAttempts?: number;
+  /** Сколько результатов просить у каждого источника. */
+  searchLimit?: number;
+}
+
+export class Resolver {
+  private streamProviders = new Map<Source, StreamProvider>();
+  private opts: Required<ResolverOptions>;
+
+  constructor(
+    private searchProviders: SearchProvider[],
+    streamProviders: StreamProvider[],
+    opts: ResolverOptions = {},
+  ) {
+    for (const p of streamProviders) this.streamProviders.set(p.source, p);
+    this.opts = { maxStreamAttempts: 4, searchLimit: 10, ...opts };
+  }
+
+  /** Поиск сразу во всех источниках. Ошибка одного источника не ломает остальные. */
+  async search(query: string): Promise<{ candidates: Candidate[]; errors: string[] }> {
+    const results = await Promise.allSettled(this.searchProviders.map((p) => p.search(query, this.opts.searchLimit)));
+    const candidates: Candidate[] = [];
+    const errors: string[] = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') candidates.push(...r.value);
+      else errors.push(`${this.searchProviders[i].source}: ${(r.reason as Error)?.message ?? r.reason}`);
+    });
+    return { candidates, errors };
+  }
+
+  /** Лучший кандидат для трека (см. match.ts). */
+  match(candidates: Candidate[], wanted: WantedTrack): ScoredCandidate | null {
+    return match(candidates, wanted);
+  }
+
+  /** Прямой поток для кандидата или причина, почему его нет. */
+  async getStream(candidate: Candidate): Promise<StreamResult> {
+    const p = this.streamProviders.get(candidate.source);
+    if (!p) return { ok: false, reason: 'error', message: `нет StreamProvider для ${candidate.source}` };
+    return p.getStream(candidate);
+  }
+
+  /**
+   * Только поиск и выбор версии, без получения потока (быстро; нужно для импорта списков).
+   * Звук проверяется позже, прямо перед Play.
+   */
+  async findBest(wanted: WantedTrack): Promise<{
+    best: ScoredCandidate | null;
+    referenceDuration: number | null;
+    ranked: ScoredCandidate[];
+    errors: string[];
+  }> {
+    // Источники спрашиваем по очереди: если первый (YouTube Music, ~1 с) уже дал уверенное
+    // совпадение, медленный поиск SoundCloud (~10 с через yt-dlp) пропускаем
+    const query = `${wanted.artist} ${wanted.title}`;
+    const candidates: Candidate[] = [];
+    const errors: string[] = [];
+    let referenceDuration: number | null = null;
+    let ranked: ScoredCandidate[] = [];
+    for (const p of this.searchProviders) {
+      try {
+        candidates.push(...(await p.search(query, this.opts.searchLimit)));
+      } catch (e) {
+        errors.push(`${p.source}: ${(e as Error).message}`);
+      }
+      referenceDuration = wanted.duration ?? inferReferenceDuration(candidates, wanted);
+      ranked = rankCandidates(candidates, { ...wanted, duration: referenceDuration });
+      if (ranked[0] && !ranked[0].rejected && ranked[0].score >= CONFIDENT_SCORE) break;
+    }
+    const best = ranked[0] && !ranked[0].rejected ? ranked[0] : null;
+    return { best, referenceDuration, ranked, errors };
+  }
+
+  /** Полный цикл: поиск, сопоставление, поток с fallback. */
+  async resolve(wanted: WantedTrack): Promise<ResolveResult> {
+    const { candidates, errors } = await this.search(`${wanted.artist} ${wanted.title}`);
+    const referenceDuration = wanted.duration ?? inferReferenceDuration(candidates, wanted);
+    const target: WantedTrack = { ...wanted, duration: referenceDuration };
+    const ranked = rankCandidates(candidates, target);
+    const good = ranked.filter((s) => !s.rejected);
+    const attempts: StreamAttempt[] = [];
+
+    for (const s of good.slice(0, this.opts.maxStreamAttempts)) {
+      const r = await this.getStream(s.candidate);
+      if (!r.ok) {
+        attempts.push({ candidate: s.candidate, ok: false, reason: r.reason, message: r.message });
+        continue;
+      }
+      // Длительность самого потока: ловит обрезанные фрагменты, которые поиск показал как полные
+      if (referenceDuration && r.stream.duration && Math.abs(r.stream.duration - referenceDuration) > DURATION_TOLERANCE) {
+        attempts.push({
+          candidate: s.candidate,
+          ok: false,
+          reason: 'duration_mismatch',
+          message: `поток ${Math.round(r.stream.duration)}с вместо ${Math.round(referenceDuration)}с`,
+        });
+        continue;
+      }
+      attempts.push({ candidate: s.candidate, ok: true });
+      return { status: 'ok', chosen: s, stream: r.stream, referenceDuration, attempts, ranked };
+    }
+    return {
+      status: good.length ? 'unavailable' : 'not_found',
+      referenceDuration,
+      attempts,
+      ranked,
+      searchErrors: errors,
+    };
+  }
+}
