@@ -136,15 +136,18 @@ export default function App() {
   // Ключ сервера: undefined = ещё читаем из Связки ключей, null = нет (экран ввода), строка = есть
   const [key, setKey] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    void loadKey().then(async (k) => {
-      // Снимки в симуляторе: ключ аргументом запуска, только если своего ключа нет и сервер его подтвердил
-      const arg = launchArg('mwaveKey');
-      if (!k && arg && (await checkKey(arg).catch(() => false))) {
-        await saveKey(arg);
-        k = arg;
-      }
-      setKey(k);
-    });
+    void loadKey()
+      .then(async (k) => {
+        // Снимки в симуляторе: ключ аргументом запуска, только если своего ключа нет и сервер его подтвердил
+        const arg = launchArg('mwaveKey');
+        if (!k && arg && (await checkKey(arg).catch(() => false))) {
+          await saveKey(arg);
+          k = arg;
+        }
+        setKey(k);
+      })
+      // Что бы ни случилось с ключом, без него показываем экран ввода, а не пустой экран
+      .catch(() => setKey(null));
     return onKeyForgotten(() => setKey(null));
   }, []);
   if (!fontsLoaded || key === undefined) return <View style={{ flex: 1, backgroundColor: t.c.bg }} />;
@@ -155,7 +158,7 @@ export default function App() {
           <Main />
         </AppProvider>
       ) : (
-        <KeySetup onDone={() => void loadKey().then(setKey)} />
+        <KeySetup onDone={setKey} />
       )}
     </SafeAreaProvider>
   );

@@ -29,7 +29,7 @@ xcodebuild \
   -sdk iphonesimulator \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath "$DERIVED" \
-  ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+  ARCHS=arm64 ONLY_ACTIVE_ARCH=NO   CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
   build > "$OUT/xcodebuild-sim.log" 2>&1 || { tail -50 "$OUT/xcodebuild-sim.log"; exit 1; }
 APP="$DERIVED/Build/Products/Release-iphonesimulator/mwave.app"
 test -d "$APP"

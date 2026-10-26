@@ -26,9 +26,18 @@ export async function loadKey(): Promise<string | null> {
     return null;
   }
 }
-export async function saveKey(k: string): Promise<void> {
-  await SecureStore.setItemAsync(STORE_KEY, k.trim(), opts);
+/**
+ * Сохранить ключ. Если Связка ключей недоступна (например, сборка без подписи в симуляторе), ключ работает
+ * до закрытия приложения: возвращает false, и экран ввода предупредит, что ключ придётся ввести снова.
+ */
+export async function saveKey(k: string): Promise<boolean> {
   setApiKey(k);
+  try {
+    await SecureStore.setItemAsync(STORE_KEY, k.trim(), opts);
+    return true;
+  } catch {
+    return false;
+  }
 }
 /** Кто ждёт сброса ключа (приложение покажет экран ввода). */
 const forgotten = new Set<() => void>();
@@ -40,7 +49,7 @@ export async function forgetKey(): Promise<void> {
 }
 
 /** Экран первого запуска: ввести (вставить) ключ, проверить на сервере, сохранить. */
-export function KeySetup({ onDone }: { onDone: () => void }) {
+export function KeySetup({ onDone }: { onDone: (key: string) => void }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const [value, setValue] = useState('');
@@ -58,7 +67,7 @@ export function KeySetup({ onDone }: { onDone: () => void }) {
     try {
       if (await checkKey(key)) {
         await saveKey(key);
-        onDone();
+        onDone(key);
       } else setError('Сервер не принял этот ключ. Проверь, что он скопирован целиком.');
     } catch (e) {
       setError((e as Error).message);

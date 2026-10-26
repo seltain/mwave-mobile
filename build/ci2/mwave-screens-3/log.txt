@@ -1,0 +1,76 @@
+09:06:38 Сборка для симулятора
+09:13:37 Симулятор: 291E4B86-C951-41A7-8327-84BF0304D0A9
+09:21:13 снимок key-setup-light
+09:21:28 снимок key-setup-dark
+09:21:43 снимок home-empty-dark
+09:22:03 снимок search-dark
+09:22:22 снимок artist-dark
+09:23:07 снимок now-playing-dark
+09:23:27 снимок queue-dark
+09:23:39 снимок home-dark
+09:23:48 снимок library-dark
+09:23:58 снимок fav-dark
+09:24:21 снимок search-light
+09:24:40 снимок artist-light
+09:25:48 снимок now-playing-light
+09:26:09 снимок queue-light
+09:26:21 снимок home-light
+09:26:30 снимок library-light
+09:26:40 снимок fav-light
+2026-10-26 09:21:01.894 Df mwave[42804:1c9b6] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:21:01.945 Df mwave[42804:1c98f] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:21:20.792 Df mwave[43778:1d3d4] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:21:20.871 Df mwave[43778:1d3c1] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:21:32.571 Df mwave[44115:1d7f7] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:21:32.651 Df mwave[44115:1d7e8] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:21:47.403 Df mwave[44764:1de6d] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:21:47.472 Df mwave[44764:1de5b] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:22:05.908 Df mwave[45711:1e719] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:22:05.979 Df mwave[45711:1e704] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:22:25.075 Df mwave[46786:1f0e7] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:22:25.146 Df mwave[46786:1f0d0] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:23:10.218 Df mwave[49223:20946] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:23:10.295 Df mwave[49223:2093e] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:23:29.696 Df mwave[50483:2150f] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:23:29.790 Df mwave[50483:21507] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:23:41.714 Df mwave[51248:21c89] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:23:41.812 Df mwave[51248:21c62] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:23:51.185 Df mwave[51828:2223d] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:23:51.248 Df mwave[51828:2222c] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:24:04.274 Df mwave[52495:22916] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:24:04.347 Df mwave[52495:22910] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:24:24.179 Df mwave[53260:23185] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:24:24.246 Df mwave[53260:2316f] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:24:42.583 Df mwave[54276:23c33] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:24:42.644 Df mwave[54276:23c22] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:25:52.149 Df mwave[57154:2594c] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:25:52.245 Df mwave[57154:2593b] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:26:11.444 Df mwave[58163:263c7] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:26:11.518 Df mwave[58163:263be] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:26:23.074 Df mwave[59210:26db7] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:26:23.111 Df mwave[59210:26daa] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-10-26 09:26:32.734 Df mwave[59562:2724b] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-10-26 09:26:32.780 Df mwave[59562:27227] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+09:26:44 Готово
+total 19304
+drwxr-xr-x  21 runner  staff      672 Oct 26 09:26 .
+drwxr-xr-x  10 runner  staff      320 Oct 26 09:06 ..
+-rw-r--r--@  1 runner  staff    73552 Oct 26 09:22 artist-dark.png
+-rw-r--r--@  1 runner  staff    75102 Oct 26 09:24 artist-light.png
+-rw-r--r--@  1 runner  staff    74417 Oct 26 09:23 fav-dark.png
+-rw-r--r--@  1 runner  staff    75775 Oct 26 09:26 fav-light.png
+-rw-r--r--@  1 runner  staff    74417 Oct 26 09:23 home-dark.png
+-rw-r--r--@  1 runner  staff    73598 Oct 26 09:21 home-empty-dark.png
+-rw-r--r--@  1 runner  staff    75775 Oct 26 09:26 home-light.png
+-rw-r--r--@  1 runner  staff   159637 Oct 26 09:21 key-setup-dark.png
+-rw-r--r--@  1 runner  staff   161709 Oct 26 09:21 key-setup-light.png
+-rw-r--r--@  1 runner  staff    74417 Oct 26 09:23 library-dark.png
+-rw-r--r--@  1 runner  staff    76521 Oct 26 09:26 library-light.png
+-rw-r--r--   1 runner  staff     5222 Oct 26 09:26 log.txt
+-rw-r--r--@  1 runner  staff    74417 Oct 26 09:23 now-playing-dark.png
+-rw-r--r--@  1 runner  staff    75387 Oct 26 09:25 now-playing-light.png
+-rw-r--r--@  1 runner  staff    74417 Oct 26 09:23 queue-dark.png
+-rw-r--r--@  1 runner  staff    76535 Oct 26 09:26 queue-light.png
+-rw-r--r--@  1 runner  staff    73552 Oct 26 09:22 search-dark.png
+-rw-r--r--@  1 runner  staff    75099 Oct 26 09:24 search-light.png
+-rw-r--r--   1 runner  staff  8109874 Oct 26 09:13 xcodebuild-sim.log
