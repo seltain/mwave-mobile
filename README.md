@@ -37,6 +37,8 @@
   `mwave-ytdlp-update.timer` (раз в сутки `yt-dlp -U`);
 - nginx: `/etc/nginx/sites-available/mwave` (+ ссылка в `sites-enabled`), каталог `/var/www/mwave-acme`, журналы `/var/log/nginx/mwave.*.log`;
 - сертификат `/etc/letsencrypt/live/mwave.swiftsuper.online` (продлевает уже работающий certbot).
+- обновления mwave для ПК (с версии 1.4): `https://mwave.swiftsuper.online:8781/updates/` = каталог `/var/www/mwave-updates`
+  (только чтение, без списка файлов; выкладывает `npm run release` из проекта ПК). Копия конфига nginx до этого: `/root/mwave-backups/`.
 
 ### Выложить новую версию
 ```
@@ -56,5 +58,5 @@ rm /etc/systemd/system/mwave.service /etc/systemd/system/mwave-ytdlp-update.serv
 systemctl daemon-reload
 rm /etc/nginx/sites-enabled/mwave /etc/nginx/sites-available/mwave && nginx -t && systemctl reload nginx
 certbot delete --cert-name mwave.swiftsuper.online
-rm -rf /var/www/mwave-acme /opt/mwave /var/log/nginx/mwave.*.log && userdel mwave
+rm -rf /var/www/mwave-acme /var/www/mwave-updates /opt/mwave /var/log/nginx/mwave.*.log && userdel mwave
 ```
