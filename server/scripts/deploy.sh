@@ -10,11 +10,13 @@ node ../scripts/sync-pc.mjs
 npm run -s typecheck
 npm run -s build
 scp -q dist/mwave-server.mjs "$HOST:/tmp/mwave-server.mjs"
-scp -q deploy/mwave.service deploy/mwave-ytdlp-update.service deploy/mwave-ytdlp-update.timer "$HOST:/tmp/"
+scp -q deploy/mwave.service deploy/mwave-ytdlp-update.service deploy/mwave-ytdlp-update.timer deploy/yt-dlp.conf "$HOST:/tmp/"
 ssh "$HOST" 'set -e
 install -o mwave -g mwave -m 640 /tmp/mwave-server.mjs /opt/mwave/app/mwave-server.mjs
 install -m 644 /tmp/mwave.service /tmp/mwave-ytdlp-update.service /tmp/mwave-ytdlp-update.timer /etc/systemd/system/
-rm -f /tmp/mwave-server.mjs /tmp/mwave.service /tmp/mwave-ytdlp-update.service /tmp/mwave-ytdlp-update.timer
+install -d -o mwave -g mwave /opt/mwave/.config/yt-dlp
+install -o mwave -g mwave -m 644 /tmp/yt-dlp.conf /opt/mwave/.config/yt-dlp/config
+rm -f /tmp/mwave-server.mjs /tmp/mwave.service /tmp/mwave-ytdlp-update.service /tmp/mwave-ytdlp-update.timer /tmp/yt-dlp.conf
 systemctl daemon-reload
 systemctl restart mwave
 sleep 4

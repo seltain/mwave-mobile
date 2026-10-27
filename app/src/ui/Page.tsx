@@ -8,7 +8,7 @@ import { size, useTheme } from '../theme';
 /** Сколько места снизу занимают навигация и плеер (с отступами). */
 export function useBottomGap(): number {
   const insets = useSafeAreaInsets();
-  return insets.bottom + size.tabBar + size.miniPlayer + size.edge * 3;
+  return Math.max(insets.bottom - 14, size.space) + size.tabBar + size.miniPlayer + size.space + size.edge * 2;
 }
 
 export function Page({ children, onRefresh, scroll = true }: { children: ReactNode; onRefresh?: () => Promise<void> | void; scroll?: boolean }) {

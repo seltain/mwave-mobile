@@ -3,15 +3,15 @@
   "q": "Kai Angel andy warhol",
   "yt": {
    "ok": true,
-   "link": "3.8",
-   "first": "0.8",
-   "audio": "opus 48000",
+   "link": "4.4",
+   "first": "1.0",
+   "audio": "aac 44100",
    "seek": true,
    "mb": "2.9"
   },
   "sc": {
    "ok": true,
-   "link": "2.8",
+   "link": "3.3",
    "first": "0.8",
    "audio": "aac 44100"
   }
@@ -20,15 +20,15 @@
   "q": "PHARAOH Дико например",
   "yt": {
    "ok": true,
-   "link": "3.6",
-   "first": "0.7",
-   "audio": "opus 48000",
+   "link": "3.9",
+   "first": "1.0",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "2.9"
+   "mb": "2.7"
   },
   "sc": {
    "ok": true,
-   "link": "2.9",
+   "link": "3.3",
    "first": "0.8",
    "audio": "aac 44100"
   }
@@ -39,13 +39,13 @@
    "ok": true,
    "link": "4.2",
    "first": "0.8",
-   "audio": "opus 48000",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "3.6"
+   "mb": "3.8"
   },
   "sc": {
    "ok": true,
-   "link": "2.6",
+   "link": "3.6",
    "first": "0.7",
    "audio": "aac 44100"
   }
@@ -54,15 +54,15 @@
   "q": "2hollis poster boy",
   "yt": {
    "ok": true,
-   "link": "3.4",
-   "first": "0.8",
-   "audio": "opus 48000",
+   "link": "4.3",
+   "first": "1.0",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "2.1"
+   "mb": "2.0"
   },
   "sc": {
    "ok": true,
-   "link": "2.9",
+   "link": "3.2",
    "first": "0.8",
    "audio": "aac 44100"
   }
@@ -71,15 +71,15 @@
   "q": "Playboi Carti Magnolia",
   "yt": {
    "ok": true,
-   "link": "3.8",
+   "link": "4.4",
    "first": "0.8",
-   "audio": "opus 48000",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "3.3"
+   "mb": "2.9"
   },
   "sc": {
    "ok": true,
-   "link": "2.7",
+   "link": "6.2",
    "first": "0.8",
    "audio": "aac 44100"
   }
@@ -88,15 +88,15 @@
   "q": "SALUKI Запрещаю забывать",
   "yt": {
    "ok": true,
-   "link": "3.3",
-   "first": "0.8",
-   "audio": "opus 48000",
+   "link": "7.7",
+   "first": "0.9",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "2.7"
+   "mb": "2.5"
   },
   "sc": {
    "ok": true,
-   "link": "2.7",
+   "link": "6.6",
    "first": "0.7",
    "audio": "aac 44100"
   }
@@ -105,15 +105,15 @@
   "q": "Boulevard Depo 5 минут назад",
   "yt": {
    "ok": true,
-   "link": "3.5",
+   "link": "6.5",
    "first": "0.8",
-   "audio": "opus 48000",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "3.9"
+   "mb": "3.6"
   },
   "sc": {
    "ok": true,
-   "link": "2.8",
+   "link": "3.0",
    "first": "0.8",
    "audio": "aac 44100"
   }
@@ -122,15 +122,15 @@
   "q": "Kai Angel Shh!",
   "yt": {
    "ok": true,
-   "link": "3.4",
-   "first": "0.7",
-   "audio": "opus 48000",
+   "link": "5.3",
+   "first": "0.8",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "2.2"
+   "mb": "2.0"
   },
   "sc": {
    "ok": true,
-   "link": "2.7",
+   "link": "3.2",
    "first": "0.8",
    "audio": "aac 44100"
   }
@@ -139,11 +139,11 @@
   "q": "PHARAOH Родная Душа",
   "yt": {
    "ok": true,
-   "link": "3.3",
+   "link": "3.9",
    "first": "0.8",
-   "audio": "opus 48000",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "2.2"
+   "mb": "2.0"
   },
   "sc": {
    "ok": true,
@@ -156,15 +156,15 @@
   "q": "Кино Группа крови",
   "yt": {
    "ok": true,
-   "link": "3.3",
+   "link": "3.9",
    "first": "0.8",
-   "audio": "opus 48000",
+   "audio": "aac 44100",
    "seek": true,
-   "mb": "4.4"
+   "mb": "4.6"
   },
   "sc": {
    "ok": true,
-   "link": "3.0",
+   "link": "3.4",
    "first": "0.8",
    "audio": "aac 44100"
   }

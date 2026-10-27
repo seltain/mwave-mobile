@@ -66,7 +66,8 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
   const { profile, rev } = useApp();
   const freshDot = rev >= 0 && profile.favArtists().some((a) => a.fresh);
   return (
-    <View style={{ position: 'absolute', left: size.edge, right: size.edge, bottom: Math.max(insets.bottom, size.edge), gap: size.space }}>
+    // Капсулы у самого низа (над полоской «домой» iPhone), как в Apple Music: меньше просвета под ними
+    <View style={{ position: 'absolute', left: size.edge, right: size.edge, bottom: Math.max(insets.bottom - 14, size.space), gap: size.space }}>
       <MiniPlayer />
       <Glass style={{ height: size.tabBar, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: size.space }}>
         {TABS.map((tab, i) => {

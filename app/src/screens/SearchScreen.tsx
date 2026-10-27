@@ -149,7 +149,7 @@ export function SearchScreen() {
               <Txt weight="bold" size={24} lines={2}>
                 {best.kind === 'artist' ? best.artist.name : best.song.title}
               </Txt>
-              <Txt sub size={13} lines={1}>
+              <Txt sub size={13} lines={2}>
                 <Txt weight="semibold" size={13}>
                   {best.kind === 'artist' ? 'Артист' : 'Песня'}
                 </Txt>
