@@ -201,7 +201,7 @@ export class Player {
 
   private onStatus(s: EngineStatus): void {
     const cur = this.current;
-    this.set({ isPlaying: s.playing, time: s.time, duration: s.duration || this.st.duration });
+    this.set({ isPlaying: s.playing, time: s.time, duration: trustedDuration(s.duration, cur && (cur.playing ?? cur.candidate).duration) || this.st.duration });
     if (!cur) return;
     if (s.failed) {
       // Ссылка устарела или звук оборвался: один раз берём свежую и продолжаем с того же места
@@ -370,4 +370,15 @@ export class Player {
     this.deps.savePref('endless', on ? '1' : '0');
     return on;
   }
+}
+
+/**
+ * Длительность для экрана. AVPlayer на iPhone у потока M4A из YouTube (фрагментированный MP4) иногда
+ * оценивает длину неверно (в симуляторе 5:35 вместо 2:48). Если длина из каталога известна и плеер
+ * расходится с ней больше чем на 10 % (и на 5 с), верим каталогу.
+ */
+export function trustedDuration(engine: number, known: number | null | undefined): number {
+  if (!known || known <= 0) return engine;
+  if (!engine || engine <= 0) return known;
+  return Math.abs(engine - known) > Math.max(5, known * 0.1) ? known : engine;
 }

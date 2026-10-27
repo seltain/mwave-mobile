@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Candidate, PrepareResponse } from '../src/api';
-import { Player, type AudioEngine, type EngineStatus } from '../src/player/core';
+import { Player, trustedDuration, type AudioEngine, type EngineStatus } from '../src/player/core';
 
 const song = (id: string): Candidate => ({ source: 'ytmusic', id, title: id, artist: 'A', duration: 100, url: `https://music.youtube.com/watch?v=${id}` });
 
@@ -126,4 +126,11 @@ test('перемешивание и повтор сохраняются в пр�
   t.player.cycleRepeat();
   t.player.toggleEndless();
   assert.deepEqual(t.prefs, { shuffle: '1', repeat: 'one', endless: '0' });
+});
+
+test('длительность: при большом расхождении с каталогом верим каталогу (AVPlayer и M4A из YouTube)', () => {
+  assert.equal(trustedDuration(335, 168), 168);
+  assert.equal(trustedDuration(170, 168), 170);
+  assert.equal(trustedDuration(0, 168), 168);
+  assert.equal(trustedDuration(200, null), 200);
 });
