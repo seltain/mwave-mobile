@@ -164,6 +164,7 @@ export class Player {
   // ---------- ссылки на звук ----------
   private async link(c: Candidate, fresh = false): Promise<PrepareResponse> {
     const k = songKey(c);
+    if(fresh)this.links.delete(k);
     const hit = this.links.get(k);
     if (!fresh && hit && this.now() - hit.at < LINK_TTL_MS && (hit.res.expiresAt??Infinity)>this.now()+30000) return hit.res;
     if(!fresh&&this.inflight.has(k))return this.inflight.get(k)!;
@@ -192,7 +193,6 @@ export class Player {
     const token = ++this.token;
     if(!fresh){this.savePlayed();this.heard=0;this.savedHeard=0;this.playId=undefined;this.listenedKey=null;}this.lastPosition=startAt;this.wasPlaying=false;
     this.loading=true;this.engine.pause();if(!fresh){this.retried=null;this.fallbackRetry=false;}
-    if (startAt === 0) this.listenedKey = null;
     this.set({ index: i,isPlaying:false, time: startAt, duration: it.candidate.duration ?? 0 });
     this.patchItem(it.key, { status: 'loading', note: undefined });
     let res: PrepareResponse;
@@ -205,7 +205,7 @@ export class Player {
     if (!res.ok) {
       this.loading=false;this.patchItem(it.key, { status: 'unavailable', note: 'Источник сейчас недоступен' });
       if (i + 1 < this.st.items.length) void this.playAt(i + 1);
-      else this.set({ isPlaying: false });
+      else {this.engine.stop();this.set({ isPlaying: false });}
       return;
     }
     this.patchItem(it.key, { status: 'playing', playing: res.playing, note: res.fallbackReason ? `замена: ${res.fallbackReason}` : undefined });
@@ -219,6 +219,8 @@ export class Player {
 
   private onStatus(s: EngineStatus): void {
     if(this.disposed||this.loading)return;
+    // AVPlayer may report zero when an expired stream fails; retain the last known position.
+    if(s.failed&&s.time===0&&this.st.time>0)s={...s,time:this.st.time};
     const delta=s.time-this.lastPosition;if(this.wasPlaying&&delta>0&&delta<2)this.heard+=delta;this.lastPosition=s.time;this.wasPlaying=s.playing;
     if(this.heard-this.savedHeard>=15||!s.playing)this.savePlayed();
     const cur = this.current;
@@ -234,7 +236,9 @@ export class Player {
         void this.playAt(this.st.index,s.time,true);
       } else {
         this.patchItem(cur.key, { status: 'unavailable', note: 'Источник сейчас недоступен' });
-        this.goNext(false);
+        this.links.delete(songKey(cur.candidate));
+        const next=this.st.items.findIndex((item,i)=>i>this.st.index&&item.status!=='unavailable');
+        if(next>=0)void this.playAt(next);else{this.engine.stop();this.set({isPlaying:false});}
       }
       return;
     }
@@ -356,6 +360,7 @@ export class Player {
   }
 
   togglePlay(): void {
+    if(this.current?.status==='unavailable'){this.links.delete(songKey(this.current.candidate));void this.playAt(this.st.index);return;}
     if (this.st.index < 0) {
       if (this.st.items.length) void this.playAt(0);
       return;

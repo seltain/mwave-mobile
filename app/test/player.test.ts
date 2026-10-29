@@ -9,13 +9,13 @@ const song = (id: string): Candidate => ({ source: 'ytmusic', id, title: id, art
 
 function setup(opts: { failPrepare?: string[] } = {}) {
   let cb: (s: EngineStatus) => void = () => undefined;
-  const loaded: string[] = [];
+  const loaded: string[] = [];const positions:number[]=[];
   const prepared: string[] = [];
   const listened: string[] = [];
   const prefs: Record<string, string> = {};
   let radioCalls = 0;
   const engine: AudioEngine = {
-    load: (url) => loaded.push(url),
+    load: (url,startAt) => {loaded.push(url);positions.push(startAt);},
     play: () => cb({ playing: true, time: 1, duration: 100, finished: false, failed: false }),
     pause: () => cb({ playing: false, time: 1, duration: 100, finished: false, failed: false }),
     seek: () => undefined,
@@ -40,7 +40,7 @@ function setup(opts: { failPrepare?: string[] } = {}) {
   });
   const tick = (s: Partial<EngineStatus>) => cb({ playing: true, time: 1, duration: 100, finished: false, failed: false, ...s });
   const flush = () => new Promise((r) => setTimeout(r, 5));
-  return { player, loaded, prepared, listened, prefs, tick, flush, radioCalls: () => radioCalls };
+  return { player, loaded,positions, prepared, listened, prefs, tick, flush, radioCalls: () => radioCalls };
 }
 
 test('место: альбом с третьей песни, следующая по порядку, ссылка на следующую готовится заранее', async () => {
@@ -137,3 +137,8 @@ test('длительность: при большом расхождении с 
 
 
 test('seek does not count as listening and disposed player never starts a late load',async()=>{const t=setup();t.player.playContext([song('a')],0,'x');await t.flush();t.player.seek(80);t.tick({time:80});assert.deepEqual(t.listened,[]);for(let time=81;time<=99;time++)t.tick({time});assert.deepEqual(t.listened,[]);t.player.dispose();const count=t.loaded.length;await t.player.playAt(0);assert.equal(t.loaded.length,count);});
+
+
+test('expired audio reporting position zero resumes last position without duplicate listening',async()=>{const t=setup();t.player.playContext([song('a')],0,'x');await t.flush();for(let time=0;time<=40;time++)t.tick({time});assert.equal(t.listened.length,1);t.tick({failed:true,time:0});await t.flush();assert.equal(t.positions.at(-1),40);t.tick({time:40});assert.equal(t.listened.length,1);});
+
+test('failed track stops even with repeat-one, manual play gets a new link',async()=>{const t=setup();t.player.cycleRepeat();t.player.cycleRepeat();t.player.playContext([song('a')],0,'x');await t.flush();for(let i=0;i<3;i++){t.tick({failed:true});await t.flush();}assert.equal(t.player.current?.status,'unavailable');assert.equal(t.player.state.isPlaying,false);const calls=t.prepared.length;t.player.togglePlay();await t.flush();assert.equal(t.prepared.length,calls+1);assert.equal(t.player.current?.status,'playing');});
