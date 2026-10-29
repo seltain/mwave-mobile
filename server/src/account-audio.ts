@@ -4,7 +4,7 @@ type Entry={owner:string;url:string;expires:number;playlist:boolean;local:boolea
 export class AccountAudio {
  private entries=new Map<string,Entry>();private ids=new Map<string,string>();
  constructor(private fetcher:typeof fetch=fetch,private now=Date.now){}
- private validRemote(url:string){const u=new URL(url);if(u.protocol!=='https:'||u.username||u.password||u.port||!/(^|\.)sndcdn\.com$/.test(u.hostname))throw Error('Invalid audio CDN');return u.href;}
+ private validRemote(url:string){const u=new URL(url);if(u.protocol!=='https:'||u.username||u.password||u.port||!/(^|\.)(sndcdn\.com|soundcloud\.cloud)$/.test(u.hostname))throw Error('Invalid audio CDN');return u.href;}
  register(owner:string,url:string,expires:number,playlist=false,local=false):string{
   if(local){if(!/^http:\/\/127\.0\.0\.1:\d+\/s\/[a-f0-9]{24}$/.test(url))throw Error('Invalid local stream');}else url=this.validRemote(url);
   const key=owner+'|'+url,previous=this.ids.get(key);if(previous&&this.entries.get(previous)!.expires>this.now()+30000)return '/account-s/'+previous;
@@ -22,11 +22,12 @@ export class AccountAudio {
   const e=this.lookup(id,owner);if(!e){res.writeHead(404).end();return;}
   const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),15000);res.on('close',()=>ctrl.abort());
   try{const headers:Record<string,string>={};if(req.headers.range&&!e.playlist)headers.Range=req.headers.range;
-   const r=await this.fetcher(e.url,{method:req.method,headers,redirect:'error',signal:ctrl.signal});clearTimeout(timer);
+   let target=e.url,r=await this.fetcher(target,{method:req.method,headers,redirect:'manual',signal:ctrl.signal});
+   for(let redirects=0;[301,302,303,307,308].includes(r.status)&&redirects<3;redirects++){if(e.local)throw Error('Unexpected local redirect');const location=r.headers.get('location');if(!location)break;await r.body?.cancel();target=this.validRemote(new URL(location,target).href);r=await this.fetcher(target,{method:req.method,headers,redirect:'manual',signal:ctrl.signal});}clearTimeout(timer);
    if(!r.ok){res.writeHead(r.status===403?502:r.status).end();return;}
    const out:Record<string,string>={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'};
    const playlist=e.playlist||/mpegurl/i.test(r.headers.get('content-type')||'');
-   if(playlist&&req.method!=='HEAD'){const limited=setTimeout(()=>ctrl.abort(),10000);try{const chunks:Uint8Array[]=[];let size=0;for await(const chunk of r.body as any){size+=chunk.length;if(size>512*1024)throw Error('Playlist too large');chunks.push(chunk);}const body=this.rewrite(Buffer.concat(chunks).toString('utf8'),e);res.writeHead(200,{...out,'Content-Type':'application/vnd.apple.mpegurl'}).end(body);}finally{clearTimeout(limited);}return;}
+   if(playlist&&req.method!=='HEAD'){const limited=setTimeout(()=>ctrl.abort(),10000);try{const chunks:Uint8Array[]=[];let size=0;for await(const chunk of r.body as any){size+=chunk.length;if(size>512*1024)throw Error('Playlist too large');chunks.push(chunk);}const body=this.rewrite(Buffer.concat(chunks).toString('utf8'),{...e,url:target});res.writeHead(200,{...out,'Content-Type':'application/vnd.apple.mpegurl'}).end(body);}finally{clearTimeout(limited);}return;}
    for(const h of ['content-type','content-length','content-range','accept-ranges'])if(r.headers.has(h))out[h]=r.headers.get(h)!;
    res.writeHead(r.status,out);if(req.method==='HEAD'||!r.body){res.end();return;}Readable.fromWeb(r.body as any).on('error',()=>res.destroy()).pipe(res);
   }catch{if(!res.headersSent)res.writeHead(502).end();else res.destroy();}finally{clearTimeout(timer);}

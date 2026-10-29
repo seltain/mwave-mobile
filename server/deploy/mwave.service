@@ -12,7 +12,7 @@ WorkingDirectory=/opt/mwave
 Environment=HOME=/opt/mwave XDG_CACHE_HOME=/opt/mwave/cache DENO_DIR=/opt/mwave/cache/deno PATH=/opt/mwave/bin:/usr/bin:/bin
 Environment=MWAVE_PORT=8780 MWAVE_HOST=127.0.0.1 MWAVE_TOKEN_FILE=/opt/mwave/secret/token MWAVE_LOG_DIR=/opt/mwave/logs
 Environment=MWAVE_PUBLIC_URL=https://mwave.swiftsuper.online:8781
-ExecStart=/opt/mwave/bin/deno run --allow-net --allow-env --allow-read=/opt/mwave --allow-write=/opt/mwave/logs --allow-run=/opt/mwave/bin/yt-dlp --allow-sys /opt/mwave/app/mwave-server.mjs
+ExecStart=/opt/mwave/bin/deno run --allow-net --allow-env --allow-read=/opt/mwave --allow-write=/opt/mwave/logs,/opt/mwave/cache/lyrics,/opt/mwave/cache/charts --allow-run=/opt/mwave/bin/yt-dlp --allow-sys /opt/mwave/app/mwave-server.mjs
 # Упал: перезапуск через 3 с
 Restart=always
 RestartSec=3

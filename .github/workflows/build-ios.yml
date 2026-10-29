@@ -36,19 +36,15 @@ jobs:
           test -d "$DEVELOPER_DIR"
           npm ci --include=dev
           bundle install --jobs 4 --retry 3
-      - name: Cache browser for fixture acceptance
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Caches/ms-playwright
-          key: playwright-1.56.1-macos
       - name: Types, offline tests, web acceptance
+        timeout-minutes: 6
         run: |
           npm run typecheck
           npm run check:dependencies
           npm test
           npm run check:native
           python3 -m unittest discover -s scripts -p 'test_*.py'
-          npx playwright install chromium
+          test -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
           npm run test:web
           cd ../server
           npm ci --include=dev
@@ -105,6 +101,7 @@ jobs:
             app/build/screens/native-acceptance.png
             app/build/screens/xcodebuild-sim.log
             app/build/xcodebuild.log
+            app/build/web-*.log
             app/build/web-results.json
             app/build/web-*.png
             app/test-results/

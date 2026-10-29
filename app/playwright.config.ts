@@ -1,2 +1,2 @@
 import{defineConfig}from'@playwright/test';
-export default defineConfig({testDir:'./web-test',timeout:60000,workers:1,use:{baseURL:'http://localhost:18080',viewport:{width:390,height:844},browserName:'chromium',channel:process.env.CI?undefined:'chrome',launchOptions:{args:['--autoplay-policy=no-user-gesture-required']},screenshot:'only-on-failure'},reporter:[['list'],['json',{outputFile:'build/web-results.json'}]]});
+export default defineConfig({testDir:'./web-test',timeout:60000,workers:1,use:{baseURL:'http://localhost:18080',viewport:{width:390,height:844},browserName:'chromium',channel:'chrome',launchOptions:{args:['--autoplay-policy=no-user-gesture-required']},screenshot:'only-on-failure'},reporter:[['list'],['json',{outputFile:'build/web-results.json'}]]});
