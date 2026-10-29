@@ -10,6 +10,23 @@ public class MwaveRemoteModule: Module {
   public func definition() -> ModuleDefinition {
     Name("MwaveRemote")
     Events("onRemoteNext", "onRemotePrevious")
+    Constants(["isSimulator": Self.simulator])
+    Function("setTimeline") { (elapsed: Double, duration: Double, playing: Bool) in
+      DispatchQueue.main.async {
+        guard var info = MPNowPlayingInfoCenter.default().nowPlayingInfo else { return }
+        if duration > 0 { info[MPMediaItemPropertyPlaybackDuration] = duration }
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? 1.0 : 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+      }
+    }
+    // CI exercises the same event bridge in a simulator. This method is absent on devices.
+    #if targetEnvironment(simulator)
+    Function("simulateCommand") { (command: String) in
+      if command == "next" { self.sendEvent("onRemoteNext", [:]) }
+      if command == "previous" { self.sendEvent("onRemotePrevious", [:]) }
+    }
+    #endif
 
     Function("setEnabled") { (enabled: Bool) in
       DispatchQueue.main.async {
@@ -22,6 +39,14 @@ public class MwaveRemoteModule: Module {
         self.apply(false)
       }
     }
+  }
+
+  private static var simulator: Bool {
+    #if targetEnvironment(simulator)
+    return true
+    #else
+    return false
+    #endif
   }
 
   private func apply(_ enabled: Bool) {

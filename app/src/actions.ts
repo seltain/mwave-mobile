@@ -1,6 +1,6 @@
 // Действия с песнями для всех экранов: включить место, перемешать, меню песни, добавить в плейлист.
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
-import { ActionSheetIOS } from 'react-native';
+import {choose} from './ui/dialogs';
 import type { Candidate } from './api';
 import type { StackParams } from './nav';
 import { trackKey, useApp } from './state';
@@ -19,13 +19,10 @@ export function useActions() {
       say(`Добавлено в «${name}»`);
       touch();
     };
-    ActionSheetIOS.showActionSheetWithOptions(
-      { title: 'Добавить в плейлист', options: [...pls.map((p) => p.name), 'Новый плейлист…', 'Отмена'], cancelButtonIndex: pls.length + 1 },
-      (i) => {
+    choose([...pls.map(p=>p.name),'Новый плейлист…','Отмена'],(i) => {
         if (i < pls.length) add(pls[i].id, pls[i].name);
         else if (i === pls.length) askText('Новый плейлист', (name) => add(profile.createPlaylist(name), name));
-      },
-    );
+      },'Добавить в плейлист');
   }
 
   return {
@@ -52,6 +49,7 @@ export function useActions() {
         addToPlaylist,
         openArtist,
         remove,
+        dislike:x=>{profile.hide(x);touch();if(player.current?.candidate.id===x.id)player.next();say('Больше не предлагать');},
       }),
   };
 }

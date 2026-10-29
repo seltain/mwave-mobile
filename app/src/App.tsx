@@ -1,9 +1,10 @@
+import {openDatabaseAsync} from 'expo-sqlite';
 // mwave для iPhone. Внизу стеклянная капсула навигации (4 вкладки) и над ней плеер; поверх «Сейчас играет» и очередь.
 // Тема по системе (тёмная или светлая), шрифт Onest, цвета из общей палитры проекта ПК.
 // Ссылки mwave://... открывают экраны (для снимков экрана в симуляторе на сборке):
 //   mwave://home, mwave://search?q=PHARAOH, mwave://library?tab=playlists, mwave://fav,
 //   mwave://search/artist?name=PHARAOH, mwave://search/album?id=..., mwave://now, mwave://queue, mwave://play?q=...
-import { Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold, useFonts } from '@expo-google-fonts/onest';
+import { InterTight_400Regular, InterTight_500Medium, InterTight_600SemiBold, InterTight_800ExtraBold, useFonts } from '@expo-google-fonts/inter-tight';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNavigationContainerRef, DarkTheme, DefaultTheme, NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -14,7 +15,11 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { api, checkKey } from './api';
-import { KeySetup, loadKey, onKeyForgotten, saveKey } from './key';
+import {AccountLogin,useIdentity,AccountSettings} from './screens/AccountScreen';
+import {sessions} from './sessions';
+import {getRandomBytes} from 'expo-crypto';
+import {configureRandom} from './pc/platform/crypto';
+configureRandom(bytes=>{bytes.set(getRandomBytes(bytes.length));return bytes;});
 import { launchArg } from './launchArgs';
 import type { RootParams, StackParams, TabParams } from './nav';
 import { AlbumScreen, ArtistScreen } from './screens/ArtistScreen';
@@ -54,7 +59,7 @@ function TabsScreen() {
       <Tabs.Screen name="Home" component={HomeStack} />
       <Tabs.Screen name="Search" component={SearchStack} />
       <Tabs.Screen name="Library" component={LibraryStack} />
-      <Tabs.Screen name="Fav" component={FavStack} />
+
     </Tabs.Navigator>
   );
 }
@@ -124,42 +129,13 @@ function Main() {
       <Root.Navigator screenOptions={{ headerShown: false }}>
         <Root.Screen name="Tabs" component={TabsScreen} />
         <Root.Screen name="NowPlaying" component={NowPlayingScreen} options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: true }} />
+        <Root.Screen name="Account" component={AccountSettings} options={{presentation:"modal"}} />
+        <Root.Screen name="FavArtists" component={FavStack} />
         <Root.Screen name="Queue" component={QueueScreen} options={{ presentation: 'modal' }} />
       </Root.Navigator>
     </NavigationContainer>
   );
 }
 
-export default function App() {
-  const [fontsLoaded] = useFonts({ Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold });
-  const t = useTheme();
-  // Ключ сервера: undefined = ещё читаем из Связки ключей, null = нет (экран ввода), строка = есть
-  const [key, setKey] = useState<string | null | undefined>(undefined);
-  useEffect(() => {
-    void loadKey()
-      .then(async (k) => {
-        // Снимки в симуляторе: ключ аргументом запуска, только если своего ключа нет и сервер его подтвердил
-        const arg = launchArg('mwaveKey');
-        if (!k && arg && (await checkKey(arg).catch(() => false))) {
-          await saveKey(arg);
-          k = arg;
-        }
-        setKey(k);
-      })
-      // Что бы ни случилось с ключом, без него показываем экран ввода, а не пустой экран
-      .catch(() => setKey(null));
-    return onKeyForgotten(() => setKey(null));
-  }, []);
-  if (!fontsLoaded || key === undefined) return <View style={{ flex: 1, backgroundColor: t.c.bg }} />;
-  return (
-    <SafeAreaProvider>
-      {key ? (
-        <AppProvider>
-          <Main />
-        </AppProvider>
-      ) : (
-        <KeySetup onDone={setKey} />
-      )}
-    </SafeAreaProvider>
-  );
-}
+function LibraryGate({accountId,children}:{accountId:string;children:React.ReactNode}){const[ready,setReady]=useState(false),[error,setError]=useState('');useEffect(()=>{let active=true,db:Awaited<ReturnType<typeof openDatabaseAsync>>|undefined;void openDatabaseAsync('mwave-account-'+accountId+'.db').then(x=>{db=x;if(active)setReady(true);else void x.closeAsync();}).catch(e=>active&&setError(String(e)));return()=>{active=false;if(db)void db.closeAsync();};},[accountId]);if(!ready)return <View style={{flex:1,backgroundColor:'#101012'}}>{!!error&&<AccountLogin/>}</View>;return <AppProvider accountId={accountId}>{children}</AppProvider>;}
+export default function App(){const [fontsLoaded]=useFonts({InterTight_400Regular,InterTight_500Medium,InterTight_600SemiBold,InterTight_800ExtraBold});const t=useTheme(),identity=useIdentity(),[ready,setReady]=useState(false);useEffect(()=>{void sessions.hydrate().finally(()=>setReady(true));},[]);if(!fontsLoaded||!ready)return <View style={{flex:1,backgroundColor:t.c.bg}}/>;return <SafeAreaProvider>{identity.account?<LibraryGate key={identity.account.id+':'+identity.generation} accountId={identity.account.id}><Main/></LibraryGate>:<AccountLogin/>}</SafeAreaProvider>;}

@@ -1,5 +1,7 @@
 // Значки mwave, те же формы, что в проекте ПК (src/renderer/src/ui/icons.tsx), на react-native-svg.
 // Простые линии толщиной 2; цвет передаётся явно (color), по умолчанию цвет текста темы.
+import {Text,View} from 'react-native';
+import {font} from '../theme';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 type P = { size?: number; color: string };
@@ -139,11 +141,5 @@ export const IconTrash = ({ size = 20, color }: P) => (
   </S>
 );
 /** Логотип mwave (как на ПК): зелёный круг, кольцо и точка. */
-export const Logo = ({ size = 32, bg, fg }: { size?: number; bg: string; fg: string }) => (
-  <Svg width={size} height={size} viewBox="0 0 40 40">
-    <Circle cx="20" cy="20" r="20" fill={bg} />
-    <Circle cx="20" cy="20" r="6.67" fill="none" stroke={fg} strokeWidth={2} />
-    <Circle cx="20" cy="20" r="2.08" fill="none" stroke={fg} strokeWidth={2} />
-  </Svg>
-);
-export { Rect };
+export const Logo=({size=32,bg='#34D27B',fg='#0A0A0A'}:{size?:number;bg?:string;fg?:string})=><View style={{width:size,height:size,backgroundColor:bg,borderRadius:2,alignItems:'center',justifyContent:'center'}}><Text style={{fontFamily:font.bold,fontSize:size*.85,lineHeight:size,color:fg,marginTop:-size*.07}}>m</Text></View>;
+export {Rect};

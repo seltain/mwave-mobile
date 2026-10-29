@@ -13,7 +13,6 @@ const TABS = [
   { name: 'Home', label: 'Главная', Icon: IconHome },
   { name: 'Search', label: 'Поиск', Icon: IconSearch },
   { name: 'Library', label: 'Медиатека', Icon: IconLibrary },
-  { name: 'Fav', label: 'Избранные артисты', Icon: IconHeart },
 ] as const;
 
 function MiniPlayer() {
@@ -80,13 +79,13 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
               accessibilityState={{ selected: on }}
               onPress={() => {
                 // Повторное нажатие на открытую вкладку возвращает к её началу
-                if (on) navigation.navigate(tab.name, { screen: `${tab.name === 'Fav' ? 'Fav' : tab.name}Root` });
+                if (on) navigation.navigate(tab.name, { screen: `${tab.name}Root` });
                 else navigation.navigate(tab.name);
               }}
               style={{ width: 64, height: 48, borderRadius: size.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? c.activePill : 'transparent' }}
             >
               <tab.Icon size={24} color={on ? c.text : c.sub} />
-              {tab.name === 'Fav' && freshDot && <View style={{ position: 'absolute', top: 10, right: 18, width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent }} />}
+              {false && freshDot && <View style={{ position: 'absolute', top: 10, right: 18, width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent }} />}
             </Pressable>
           );
         })}

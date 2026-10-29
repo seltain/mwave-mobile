@@ -14,7 +14,7 @@ import { IconBack, IconCheck, IconHeart, IconPlay, IconShuffle, IconWave } from 
 import { AlbumCard, Btn, Cover, EmptyState, ErrorState, Loading, SectionHead, SkeletonRows, TrackRow, Txt } from '../ui/kit';
 import { Page } from '../ui/Page';
 
-const SONGS = { ytmusic: 'YouTube Music', soundcloud: 'SoundCloud' } as const;
+const SONGS = { ytmusic: 'YouTube Music', soundcloud: 'SoundCloud', local: 'Файл на другом устройстве' } as const;
 const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'песня' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'песни' : 'песен');
 
 export function BackBtn() {
@@ -239,7 +239,7 @@ export function ArtistScreen() {
 }
 
 export function AlbumScreen() {
-  const { favKeys } = useApp();
+  const { favKeys,profile,touch,rev } = useApp();
   const st = usePlayerState();
   const a = useActions();
   const { params } = useRoute<RouteProp<StackParams, 'Album'>>();
@@ -253,7 +253,7 @@ export function AlbumScreen() {
     api
       .album(params.id)
       .then((r) => alive && (r.status === 'ok' ? setAlbum(r.album) : setError(r.message)))
-      .catch((e) => alive && setError((e as Error).message));
+      .catch((e) => {if(!alive)return;const cached=profile.savedAlbum(params.id);if(cached)setAlbum(cached);else setError((e as Error).message);});
     return () => {
       alive = false;
     };
@@ -282,7 +282,7 @@ export function AlbumScreen() {
           </Pressable>
         }
       >
-        <PlayButtons tracks={album.tracks} from={from} />
+        <PlayButtons tracks={album.tracks} from={from} /><Btn title={profile.savedAlbum(album.id)?'Убрать из медиатеки':'Сохранить альбом'} onPress={()=>{if(profile.savedAlbum(album.id))profile.unsaveAlbum(album.id);else profile.saveAlbum(album);touch();}}/>
       </Hero>
       <View>
         {album.tracks.map((s, i) => (

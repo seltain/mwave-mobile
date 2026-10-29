@@ -7,14 +7,16 @@ import { api, type Candidate } from './api';
 import { createExpoEngine } from './player/expoEngine';
 import { Player, type PlayerState, type RepeatMode } from './player/core';
 import { artistKey, Profile, trackKey, type Sql } from './profile';
+import {sessions} from './sessions';import {AccountClient} from './pc/main/accounts/client';import {AccountVault} from './pc/main/accounts/vault';import {connectCovers} from './sync-covers';import {setAuthorization,authorization} from './transport';import type{AccountState}from'./pc/shared/accounts';
 
 /** Как часто проверять новинки одного избранного артиста (как на ПК). */
 const FRESH_EVERY_MS = 3 * 3600_000;
 /** Первая проверка после запуска: позже, чтобы не тормозить открытие. */
 const FRESH_FIRST_DELAY_MS = 8_000;
 
-function expoSql(): Sql {
-  const db = openDatabaseSync('mwave.db');
+function expoSql(account:string): Sql {
+  if(!/^[a-f0-9-]{36}$/.test(account))throw Error('Неверный аккаунт');
+  const db = openDatabaseSync('mwave-account-'+account+'.db');
   return {
     exec: (sql) => db.execSync(sql),
     run: (sql, ...p) => {
@@ -23,6 +25,7 @@ function expoSql(): Sql {
     },
     all: (sql, ...p) => db.getAllSync(sql, p),
     get: (sql, ...p) => db.getFirstSync(sql, p) ?? undefined,
+    close:()=>db.closeSync(),
   };
 }
 
@@ -37,14 +40,19 @@ interface Ctx {
   favKeys: Set<string>;
   toggleFav: (c: Candidate) => void;
   checkFresh: () => void;
+  sync:()=>Promise<void>;syncState:AccountState;logout:()=>Promise<void>;
 }
 
 const AppCtx = createContext<Ctx | null>(null);
 
-export function AppProvider({ children }: { children: ReactNode }) {
-  const profile = useMemo(() => new Profile(expoSql()), []);
+export function AppProvider({ children,accountId }: { children: ReactNode;accountId:string }) {
+  const alive=useRef(true);
+  const profile = useMemo(() => new Profile(expoSql(accountId)), [accountId]);
   const [rev, setRev] = useState(0);
   const touch = useCallback(() => setRev((r) => r + 1), []);
+  const client=useMemo(()=>new AccountClient(profile.db,new AccountVault(sessions,accountId),()=>alive.current?1:null,touch,sessions.base),[profile,accountId,touch]);
+  const sync=useCallback(async()=>{try{await client.ensure();if(!client.state().bound&&client.state().account)await client.bind();await client.sync();}catch{}finally{if(alive.current)touch();}},[client,touch]);
+  useEffect(()=>{alive.current=true;connectCovers(client,profile);setAuthorization(force=>client.accessHeaders(force));void sync();const timer=setInterval(()=>void sync(),45000),pending=setInterval(()=>{if(client.state().pending)void sync();},3000);const sub=AppState.addEventListener('change',s=>{if(s==='active')void sync();});return()=>{alive.current=false;clearInterval(timer);clearInterval(pending);sub.remove();void client.sync().finally(()=>profile.db.close());};},[client,profile,sync]);
   const [toast, setToast] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const say = useCallback((msg: string) => {
@@ -56,8 +64,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const player = useMemo(() => {
     const p = new Player(createExpoEngine(), {
       prepare: api.prepare,
+      headers:authorization,
       prefetch: (list) => void api.prefetch(list),
-      radio: api.radio,
+      radio:async(seed,exclude,recent)=>{const r=await api.radio(seed,exclude,recent);return r.ok?{...r,tracks:r.tracks.filter(c=>!profile.isHidden(c))}:r;},
       recent: () => profile.recentTracks(3),
       onListened: (c) => {
         profile.addHistory(c);
@@ -117,7 +126,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [checkFresh]);
 
-  const value = useMemo(() => ({ profile, player, rev, touch, toast, say, favKeys, toggleFav, checkFresh }), [profile, player, rev, touch, toast, say, favKeys, toggleFav, checkFresh]);
+  const logout=useCallback(async()=>{player.dispose();await Promise.race([client.logout().catch(()=>{}),new Promise(r=>setTimeout(r,1500))]);await sessions.logoutLocal();},[client,player]);
+  useEffect(()=>()=>player.dispose(),[player]);
+  const value = { profile, player, rev, touch, toast, say, favKeys, toggleFav, checkFresh,sync,syncState:client.state(),logout };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
 

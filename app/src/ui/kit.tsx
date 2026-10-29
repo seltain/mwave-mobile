@@ -1,9 +1,10 @@
+import {choose} from './dialogs';
 // Общие элементы интерфейса mwave на телефоне, по образцу ПК: текст Onest, стекло, обложки,
 // кнопки-капсулы, строки песен, круги артистов, плитки альбомов, состояния загрузки, пусто и ошибка.
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActionSheetIOS, ActivityIndicator, Alert, Pressable, StyleSheet, Text, View, type ImageStyle, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, ActionSheetIOS, ActivityIndicator, Alert, Pressable, StyleSheet, Text, View, type ImageStyle, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import type { AlbumRef, Candidate } from '../api';
 import { artistRefsOf } from '../pc/shared/artistNames';
 import { font, size, useTheme } from '../theme';
@@ -214,6 +215,7 @@ export interface TrackMenuActions {
   addToPlaylist: (c: Candidate) => void;
   openArtist: (name: string, ytId?: string) => void;
   remove?: () => void;
+  dislike?:(c:Candidate)=>void;
 }
 
 /** Меню песни: родное меню iOS снизу. */
@@ -225,6 +227,7 @@ export function openTrackMenu(c: Candidate, fav: boolean, a: TrackMenuActions): 
     ['Включить похожее', () => a.radio(c)],
     [fav ? 'Убрать из любимых' : 'В любимые треки', () => a.toggleFav(c)],
     ['Добавить в плейлист', () => a.addToPlaylist(c)],
+    ...(a.dislike?[["Не нравится",()=>a.dislike!(c)] as [string,()=>void]]:[]),
     ...artists.slice(0, 2).map((r): [string, () => void] => [`Открыть: ${r.name}`, () => a.openArtist(r.name, r.ytId)]),
     ...(a.remove ? ([['Убрать из плейлиста', a.remove]] as [string, () => void][]) : []),
   ];
@@ -368,6 +371,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry: () 
 
 /** Поле ввода названия (iOS): новый плейлист, переименование. */
 export function askText(title: string, onOk: (v: string) => void, initial = ''): void {
+  if(Platform.OS==='web'){const v=globalThis.prompt(title,initial);if(v?.trim())onOk(v.trim());return;}
   Alert.prompt(title, undefined, [{ text: 'Отмена', style: 'cancel' }, { text: 'Готово', onPress: (v?: string) => v?.trim() && onOk(v.trim()) }], 'plain-text', initial);
 }
 

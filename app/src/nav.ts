@@ -5,7 +5,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 export type StackParams = {
   HomeRoot: undefined;
   SearchRoot: { q?: string } | undefined;
-  LibraryRoot: { tab?: 'liked' | 'playlists' | 'history' } | undefined;
+  LibraryRoot: { tab?: 'liked' | 'playlists' | 'history' | 'albums' } | undefined;
   FavRoot: undefined;
   Artist: { name: string; ytId?: string };
   Album: { id: string };
@@ -22,6 +22,8 @@ export type TabParams = {
 export type RootParams = {
   Tabs: NavigatorScreenParams<TabParams>;
   NowPlaying: undefined;
+  Account: undefined;
+  FavArtists: undefined;
   Queue: undefined;
 };
 

@@ -28,7 +28,7 @@ const song = (id: string, extra: Partial<Candidate> = {}): Candidate => ({
   thumbnail: `https://img/${id}`,
   ...extra,
 });
-const rel = (id: string): AlbumRef => ({ id, title: id, kind: 'single' });
+const rel = (id: string): AlbumRef => ({ id: 'MPRE'+id.padEnd(8,'_'), title: id, kind: 'single' });
 
 test('любимые: добавить, повторно = убрать, список новые сверху', () => {
   const p = new Profile(nodeSql());
@@ -76,10 +76,10 @@ test('избранные артисты: кольцо новинки появл�
   assert.equal(p.favArtists()[0].fresh, null, 'сразу после добавления кольца нет');
   // Проверка новинок: вышел r3
   p.updateArtistReleases('yt:UCabcdefghijklmnop', [rel('r3'), rel('r1'), rel('r2')]);
-  assert.equal(p.favArtists()[0].fresh?.id, 'r3');
+  assert.equal(p.favArtists()[0].fresh?.id, rel('r3').id);
   // Та же проверка ещё раз: новинка остаётся
   p.updateArtistReleases('yt:UCabcdefghijklmnop', [rel('r3'), rel('r1'), rel('r2')]);
-  assert.equal(p.favArtists()[0].fresh?.id, 'r3');
+  assert.equal(p.favArtists()[0].fresh?.id, rel('r3').id);
   // Открыли карточку: всё увидено, кольца нет
   assert.equal(p.markArtistOpened(a, [rel('r3'), rel('r1'), rel('r2')]), true);
   assert.equal(p.favArtists()[0].fresh, null);

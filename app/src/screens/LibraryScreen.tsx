@@ -10,13 +10,14 @@ import { IconMore, IconPlay, IconPlus, IconShuffle } from '../ui/icons';
 import { ArtistBubble, askText, Btn, Chip, Cover, EmptyState, H1, IconBtn, TrackRow, Txt } from '../ui/kit';
 import { Page } from '../ui/Page';
 import { Hero, PlayButtons } from './ArtistScreen';
-import { forgetKey } from '../key';
+import {choose} from '../ui/dialogs';
 
-type Tab = 'liked' | 'playlists' | 'history';
+type Tab = 'liked' | 'playlists' | 'history' | 'albums';
 const TABS: [Tab, string][] = [
   ['liked', 'Любимые треки'],
   ['playlists', 'Плейлисты'],
   ['history', 'История'],
+  ['albums', 'Альбомы'],
 ];
 const ago = (ms: number) => {
   const d = new Date(ms);
@@ -36,7 +37,7 @@ export function LibraryScreen() {
     if (route.params?.tab) setTab(route.params.tab);
   }, [route.params?.tab]);
   const { width } = useWindowDimensions();
-  const data = useMemo(() => ({ liked: profile.favorites(), playlists: profile.playlists(), history: profile.history() }), [profile, rev]);
+  const data = useMemo(() => ({ liked: profile.favorites(), playlists: profile.playlists(), history: profile.history(), albums:profile.savedAlbums() }), [profile, rev]);
   const nowKey = st.index >= 0 ? trackKey(st.items[st.index].playing ?? st.items[st.index].candidate) : '';
   const tile = (width - size.pageX * 2 - size.space * 2) / 2;
 
@@ -82,6 +83,7 @@ export function LibraryScreen() {
         )}
       </View>
     );
+  } else if(tab==='albums'){body=<View style={{gap:16}}>{data.albums.map(album=><Pressable key={album.id} onPress={()=>nav.navigate('Album',{id:album.id})}><Cover uri={album.thumbnail} letter={album.title} px={96}/><Txt weight='bold'>{album.title}</Txt><Txt sub>{album.artist}</Txt></Pressable>)}</View>;
   } else {
     const tracks = data.history.map((h) => h.track);
     body = data.history.length ? (
@@ -124,18 +126,7 @@ export function LibraryScreen() {
         ))}
       </ScrollView>
       {body}
-      <View style={{ alignItems: 'center', marginTop: size.space * 2 }}>
-        <Btn
-          small
-          title="Сменить ключ сервера"
-          onPress={() =>
-            Alert.alert('Сменить ключ сервера?', 'Приложение попросит ввести ключ заново. Профиль, плейлисты и история останутся.', [
-              { text: 'Отмена', style: 'cancel' },
-              { text: 'Сменить', style: 'destructive', onPress: () => void forgetKey() },
-            ])
-          }
-        />
-      </View>
+      <Btn title='Избранные артисты' onPress={()=>nav.getParent()?.getParent()?.navigate('FavArtists')}/><Btn title='Аккаунт' onPress={()=>nav.getParent()?.getParent()?.navigate('Account')}/>
     </Page>
   );
 }
@@ -154,7 +145,7 @@ export function PlaylistScreen() {
   const from = `Плейлист «${pl.name}»`;
   const nowKey = st.index >= 0 ? trackKey(st.items[st.index].playing ?? st.items[st.index].candidate) : '';
   const manage = () =>
-    ActionSheetIOS.showActionSheetWithOptions({ options: ['Переименовать', 'Удалить плейлист', 'Отмена'], cancelButtonIndex: 2, destructiveButtonIndex: 1 }, (i) => {
+    choose(['Переименовать','Удалить плейлист','Отмена'],(i)=>{
       if (i === 0) askText('Новое название', (name) => (profile.renamePlaylist(pl.id, name), touch()), pl.name);
       if (i === 1)
         Alert.alert(`Удалить плейлист «${pl.name}»?`, 'Песни из любимых и истории останутся.', [
@@ -185,7 +176,7 @@ export function PlaylistScreen() {
               fav={favKeys.has(trackKey(it.track))}
               playing={nowKey === trackKey(it.track)}
               onPress={() => a.play(tracks, i, from)}
-              menu={() => a.menu(it.track, () => (profile.removeFromPlaylist(it.itemId), touch()))}
+              menu={()=>choose(['Действия с песней','Выше','Ниже','Убрать из плейлиста','Отмена'],n=>{if(n===0)a.menu(it.track);if(n===1&&i>0)profile.moveItem(pl.id,it.itemId,i===1?null:items[i-2].itemId);if(n===2&&i<items.length-1)profile.moveItem(pl.id,it.itemId,items[i+1].itemId);if(n===3)profile.removeFromPlaylist(it.itemId);touch();},it.track.title)}
             />
           ))}
         </View>

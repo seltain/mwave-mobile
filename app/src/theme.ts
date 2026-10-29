@@ -3,7 +3,7 @@
 import { useColorScheme } from 'react-native';
 import { palettes, tokens, type ThemeName } from './pc/shared/theme';
 
-export type Colors = (typeof palettes)['dark'];
+export type Colors = (typeof palettes)['dark'] & {glassBorder:string;activePill:string};
 
 /** '12px' -> 12 (размеры ПК записаны для CSS). */
 const px = (v: string) => parseFloat(v);
@@ -12,12 +12,12 @@ export const size = {
   space: px(tokens.space), // шаг сетки 8
   edge: 16, // отступ капсул от краёв экрана
   pageX: 20,
-  radiusTile: px(tokens.radiusTile),
-  radiusCover: px(tokens.radiusCover),
-  radiusSmall: px(tokens.radiusSmall),
-  radiusBadge: px(tokens.radiusBadge),
-  radiusPanel: px(tokens.radiusPanel),
-  pill: 999,
+  radiusTile: px(tokens.radius),
+  radiusCover: px(tokens.radius),
+  radiusSmall: px(tokens.radius),
+  radiusBadge: px(tokens.radius),
+  radiusPanel: px(tokens.radius),
+  pill: px(tokens.radius),
   tabBar: 64, // стеклянная капсула навигации
   miniPlayer: 64, // капсула плеера над ней
   cover: 44, // обложка в строке песни
@@ -28,10 +28,10 @@ export const size = {
 };
 
 export const font = {
-  regular: 'Onest_400Regular',
-  medium: 'Onest_500Medium',
-  semibold: 'Onest_600SemiBold',
-  bold: 'Onest_700Bold',
+  regular: 'InterTight_400Regular',
+  medium: 'InterTight_500Medium',
+  semibold: 'InterTight_600SemiBold',
+  bold: 'InterTight_800ExtraBold',
 };
 
 export interface Theme {
@@ -49,5 +49,5 @@ const shadeOf = (css: string) => css.match(/rgba?\([^)]+\)/g)?.at(-1) ?? 'transp
 
 export function useTheme(): Theme {
   const name: ThemeName = useColorScheme() === 'light' ? 'light' : 'dark';
-  return { name, c: palettes[name], glassTint: name, glassIntensity: name === 'dark' ? 60 : 70, npShade: shadeOf(palettes[name].npShade) };
+  return { name, c: {...palettes[name],glassBorder:palettes[name].lineStrong,activePill:palettes[name].surf2}, glassTint: name, glassIntensity: name === 'dark' ? 60 : 70, npShade: palettes[name].overlay };
 }

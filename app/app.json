@@ -2,10 +2,11 @@
   "expo": {
     "name": "mwave",
     "slug": "mwave-mobile",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "scheme": "mwave",
     "platforms": [
-      "ios"
+      "ios",
+      "web"
     ],
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

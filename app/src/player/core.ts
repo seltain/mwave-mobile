@@ -40,17 +40,19 @@ export interface EngineStatus {
 }
 
 export interface AudioEngine {
-  load(url: string, startAt: number): void;
+  load(url: string, startAt: number, headers?:Record<string,string>): void;
+  dispose?():void;
   play(): void;
   pause(): void;
   seek(seconds: number): void;
   stop(): void;
-  setNowPlaying(meta: { title: string; artist: string; album?: string; artwork?: string } | null): void;
+  setNowPlaying(meta: { title: string; artist: string; album?: string; artwork?: string;duration?:number|null } | null): void;
   onStatus(cb: (s: EngineStatus) => void): () => void;
 }
 
 export interface PlayerDeps {
-  prepare(c: Candidate): Promise<PrepareResponse>;
+  prepare(c: Candidate, options?:{fresh?:boolean;failedSource?:string}): Promise<PrepareResponse>;
+  headers?():Promise<Record<string,string>>;
   prefetch(list: Candidate[]): void;
   radio(seed: Candidate, exclude: Candidate[], recent: Candidate[]): Promise<RadioResponse>;
   /** Песни, звучавшие недавно (волна их не повторяет). */
@@ -104,6 +106,9 @@ export class Player {
   private listenedKey: string | null = null;
   private radioAskedFor: string | null = null;
   private retried: string | null = null;
+  private disposed=false;
+  private loading=false;
+  private inflight=new Map<string,Promise<PrepareResponse>>();
   private links = new Map<string, { at: number; res: PrepareResponse & { ok: true } }>();
   private unsub: () => void;
 
@@ -146,16 +151,20 @@ export class Player {
   }
 
   dispose(): void {
+    if(this.disposed)return;this.disposed=true;this.token++;
     this.unsub();
     this.engine.stop();
+    this.engine.dispose?.();this.listeners.clear();this.links.clear();
   }
 
   // ---------- ссылки на звук ----------
   private async link(c: Candidate, fresh = false): Promise<PrepareResponse> {
     const k = songKey(c);
     const hit = this.links.get(k);
-    if (!fresh && hit && this.now() - hit.at < LINK_TTL_MS) return hit.res;
-    const res = await this.deps.prepare(c);
+    if (!fresh && hit && this.now() - hit.at < LINK_TTL_MS && (hit.res.expiresAt??Infinity)>this.now()+30000) return hit.res;
+    if(!fresh&&this.inflight.has(k))return this.inflight.get(k)!;
+    const task=this.deps.prepare(c,{fresh,failedSource:fresh?this.current?.playing?.source:undefined});this.inflight.set(k,task);
+    let res:PrepareResponse;try{res=await task;}finally{if(this.inflight.get(k)===task)this.inflight.delete(k);}
     if (res.ok) {
       this.links.set(k, { at: this.now(), res });
       if (this.links.size > 50) this.links.delete(this.links.keys().next().value!);
@@ -173,9 +182,11 @@ export class Player {
 
   // ---------- проигрывание ----------
   async playAt(i: number, startAt = 0, fresh = false): Promise<void> {
+    if(this.disposed)return;
     const it = this.st.items[i];
     if (!it) return;
     const token = ++this.token;
+    this.loading=true;this.engine.pause();if(!fresh)this.retried=null;
     if (startAt === 0) this.listenedKey = null;
     this.set({ index: i, time: startAt, duration: it.candidate.duration ?? 0 });
     this.patchItem(it.key, { status: 'loading', note: undefined });
@@ -185,21 +196,24 @@ export class Player {
     } catch (e) {
       res = { ok: false, reason: 'error', message: (e as Error).message };
     }
-    if (token !== this.token) return; // уже выбрали другую песню
+    if (token !== this.token||this.disposed) return; // уже выбрали другую песню
     if (!res.ok) {
-      this.patchItem(it.key, { status: 'unavailable', note: res.message });
+      this.loading=false;this.patchItem(it.key, { status: 'unavailable', note: 'Источник сейчас недоступен' });
       if (i + 1 < this.st.items.length) void this.playAt(i + 1);
       else this.set({ isPlaying: false });
       return;
     }
     this.patchItem(it.key, { status: 'playing', playing: res.playing, note: res.fallbackReason ? `замена: ${res.fallbackReason}` : undefined });
-    this.engine.load(res.url, startAt);
+    let headers:Record<string,string>|undefined;try{headers=await this.deps.headers?.();}catch{this.loading=false;this.patchItem(it.key,{status:'unavailable',note:'Войдите в аккаунт снова'});this.set({isPlaying:false});return;}
+    if(token!==this.token||this.disposed)return;this.loading=false;
+    this.engine.load(res.url, startAt, headers);
     const shown = res.playing ?? it.candidate;
-    this.engine.setNowPlaying({ title: shown.title, artist: shown.artist, album: this.st.context ?? undefined, artwork: shown.thumbnail });
+    this.engine.setNowPlaying({ title: shown.title, artist: shown.artist, album: this.st.context ?? undefined, artwork: shown.thumbnail,duration:shown.duration });
     this.prepareAhead();
   }
 
   private onStatus(s: EngineStatus): void {
+    if(this.disposed||this.loading)return;
     const cur = this.current;
     this.set({ isPlaying: s.playing, time: s.time, duration: trustedDuration(s.duration, cur && (cur.playing ?? cur.candidate).duration) || this.st.duration });
     if (!cur) return;
@@ -209,7 +223,7 @@ export class Player {
         this.retried = cur.key;
         void this.playAt(this.st.index, s.time, true);
       } else {
-        this.patchItem(cur.key, { status: 'unavailable', note: 'звук не загрузился' });
+        this.patchItem(cur.key, { status: 'unavailable', note: 'Источник сейчас недоступен' });
         this.goNext(false);
       }
       return;
@@ -246,6 +260,7 @@ export class Player {
     const q = { items: this.st.items, index: this.st.index };
     const nx = advance(q, this.st.repeat, byUser, this.st.shuffle);
     if (!nx) {
+      this.engine.pause();
       this.set({ isPlaying: false });
       return;
     }

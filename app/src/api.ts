@@ -4,6 +4,8 @@
 import type { AlbumPage, AlbumRef, ArtistCard, ArtistOption, ArtistRef } from './pc/main/artist/types';
 import type { AlbumHit } from './pc/main/artist/ytmArtist';
 import type { Candidate } from './pc/main/resolver/types';
+import {fixtureMode,fixturePost} from './fixtures';
+import {authorization} from './transport';
 
 export type { AlbumHit, AlbumPage, AlbumRef, ArtistCard, ArtistOption, ArtistRef, Candidate };
 
@@ -20,17 +22,18 @@ export const hasApiKey = () => !!KEY;
 export class ApiError extends Error {}
 
 async function post<T>(path: string, body: unknown, timeoutMs = 30_000): Promise<T> {
-  if (!KEY) throw new ApiError('Не введён ключ сервера');
+  if(fixtureMode)return fixturePost(path,body);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetch(BASE + path, {
+    const send=async(force=false)=>fetch(BASE + path, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
+      headers: { 'content-type': 'application/json', ...(await authorization(force)) },
       body: JSON.stringify(body ?? {}),
       signal: ctrl.signal,
     });
-    if (r.status === 401) throw new ApiError('Сервер не принял ключ приложения');
+    let r=await send();if(r.status===401)r=await send(true);
+    if (r.status === 401) throw new ApiError('Войдите в аккаунт mwave снова');
     if (r.status === 429) throw new ApiError('Слишком много запросов, подожди минуту');
     if (!r.ok) throw new ApiError(`Сервер ответил ${r.status}`);
     return (await r.json()) as T;
@@ -45,7 +48,7 @@ async function post<T>(path: string, body: unknown, timeoutMs = 30_000): Promise
 export type SearchResponse = { items: Candidate[]; error?: string };
 export type MoreResponse = { artists: ArtistOption[]; albums: AlbumHit[]; error?: string };
 export type PrepareResponse =
-  | { ok: true; url: string; protocol: 'http' | 'hls'; duration: number | null; playing: Candidate; fallbackReason?: string }
+  | { ok: true; url: string; protocol: 'http' | 'hls'; duration: number | null; playing: Candidate; fallbackReason?: string;expiresAt?:number }
   | { ok: false; reason: string; message: string };
 export type ArtistResult =
   | { status: 'ok'; card: ArtistCard }
@@ -76,7 +79,7 @@ export async function checkKey(key: string): Promise<boolean> {
 export const api = {
   search: (q: string, source: 'ytmusic' | 'soundcloud') => post<SearchResponse>('/api/search', { q, source }, source === 'soundcloud' ? 30_000 : 20_000),
   searchMore: (q: string) => post<MoreResponse>('/api/search/more', { q }),
-  prepare: (candidate: Candidate) => post<PrepareResponse>('/api/prepare', { candidate }, 120_000),
+  prepare: (candidate: Candidate,options:{fresh?:boolean;failedSource?:string}={}) => post<PrepareResponse>('/api/prepare', { candidate,...options }, 25_000),
   prefetch: (list: Candidate[]) => post<{ ok: boolean }>('/api/prefetch', { list: list.slice(0, 6) }).catch(() => undefined),
   artistQuick: (ref: ArtistRef) => post<ArtistResult>('/api/artist/quick', { ref }),
   artistFull: (ref: ArtistRef) => post<ArtistResult>('/api/artist/full', { ref }, 60_000),
