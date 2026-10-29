@@ -13,7 +13,11 @@
     "check:dependencies": "expo install --check",
     "bundle:ios": "expo export --platform ios --output-dir dist",
     "prebuild:ios": "expo prebuild --platform ios --no-install",
-    "build:ios:unsigned": "bash scripts/build-ios-unsigned.sh"
+    "build:ios:unsigned": "bash scripts/build-ios-unsigned.sh",
+    "postinstall": "node scripts/patch-sqlite-web.mjs",
+    "test:web": "node scripts/check-web.mjs",
+    "check:native": "node scripts/check-native-module.mjs",
+    "test:web:running": "playwright test"
   },
   "dependencies": {
     "@expo-google-fonts/inter-tight": "0.4.2",

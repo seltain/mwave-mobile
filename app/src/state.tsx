@@ -68,10 +68,11 @@ export function AppProvider({ children,accountId }: { children: ReactNode;accoun
       prefetch: (list) => void api.prefetch(list),
       radio:async(seed,exclude,recent)=>{const r=await api.radio(seed,exclude,recent);return r.ok?{...r,tracks:r.tracks.filter(c=>!profile.isHidden(c))}:r;},
       recent: () => profile.recentTracks(3),
-      onListened: (c) => {
-        profile.addHistory(c);
-        setRev((r) => r + 1);
+      onListened: (c,seconds) => {
+        const id=profile.addHistory(c);profile.store.setPlayed(id,seconds);
+        setRev((r) => r + 1);return id;
       },
+      onPlayed:(id,seconds)=>profile.store.setPlayed(id,seconds),
       savePref: (n, v) => profile.setPref(n, v),
     });
     const rep = profile.pref('repeat');

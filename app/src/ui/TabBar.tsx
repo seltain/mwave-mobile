@@ -40,7 +40,7 @@ function MiniPlayer() {
               {t ? t.title : 'Ничего не играет'}
             </Txt>
             <Txt sub size={12} lines={1}>
-              {t ? (cur?.status === 'loading' ? 'получаю звук…' : t.artist) : 'Найди песню и нажми на неё'}
+              {t ? (cur?.status === 'loading' ? 'Получаю звук…' : cur?.status==='unavailable'?(cur.note||'Источник сейчас недоступен'):t.artist) : 'Найди песню и нажми на неё'}
             </Txt>
           </View>
           <IconBtn onPress={() => player.togglePlay()} label={st.isPlaying ? 'Пауза' : 'Играть'}>

@@ -231,10 +231,7 @@ export function openTrackMenu(c: Candidate, fav: boolean, a: TrackMenuActions): 
     ...artists.slice(0, 2).map((r): [string, () => void] => [`Открыть: ${r.name}`, () => a.openArtist(r.name, r.ytId)]),
     ...(a.remove ? ([['Убрать из плейлиста', a.remove]] as [string, () => void][]) : []),
   ];
-  ActionSheetIOS.showActionSheetWithOptions(
-    { title: c.title, message: c.artist, options: [...items.map((i) => i[0]), 'Отмена'], cancelButtonIndex: items.length, destructiveButtonIndex: a.remove ? items.length - 1 : undefined },
-    (i) => i < items.length && items[i][1](),
-  );
+  choose([...items.map(i=>i[0]),'Отмена'],i=>items[i]?.[1](),c.title);
 }
 
 export function TrackRow({

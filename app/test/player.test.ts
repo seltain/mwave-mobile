@@ -59,9 +59,7 @@ test('история: песня считается прослушанной п�
   const t = setup();
   t.player.playContext([song('a')], 0, 'x');
   await t.flush();
-  t.tick({ time: 10 });
-  t.tick({ time: 31 });
-  t.tick({ time: 40 });
+  for(let time=0;time<=40;time++)t.tick({time});
   assert.deepEqual(t.listened, ['a']);
 });
 
@@ -97,7 +95,7 @@ test('недоступная песня пропускается, плеер и�
   assert.equal(t.player.state.items[1].status, 'unavailable');
 });
 
-test('сбой звука: один раз свежая ссылка с того же места, потом следующая песня', async () => {
+test('сбой звука: один раз свежая ссылка с того же места, потом запасной источник и следующая песня', async () => {
   const t = setup();
   t.player.playContext([song('a'), song('b')], 0, 'x');
   await t.flush();
@@ -107,6 +105,8 @@ test('сбой звука: один раз свежая ссылка с того
   assert.equal(t.prepared.filter((x) => x === 'a').length, 2, 'свежая ссылка');
   t.tick({ failed: true, time: 50 });
   await t.flush();
+  assert.equal(t.player.current?.candidate.id,'a','отдельная попытка запасного источника');
+  t.tick({failed:true,time:50});await t.flush();
   assert.equal(t.player.current?.candidate.id, 'b');
 });
 
@@ -134,3 +134,6 @@ test('длительность: при большом расхождении с 
   assert.equal(trustedDuration(0, 168), 168);
   assert.equal(trustedDuration(200, null), 200);
 });
+
+
+test('seek does not count as listening and disposed player never starts a late load',async()=>{const t=setup();t.player.playContext([song('a')],0,'x');await t.flush();t.player.seek(80);t.tick({time:80});assert.deepEqual(t.listened,[]);for(let time=81;time<=99;time++)t.tick({time});assert.deepEqual(t.listened,[]);t.player.dispose();const count=t.loaded.length;await t.player.playAt(0);assert.equal(t.loaded.length,count);});

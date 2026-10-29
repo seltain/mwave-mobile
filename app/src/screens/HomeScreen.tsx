@@ -4,13 +4,13 @@ import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useActions } from '../actions';
-import type { AlbumRef, Candidate } from '../api';
+import {api,type AlbumRef,type Candidate} from '../api';
 import type { StackParams, TabParams } from '../nav';
 import { artistRefsOf } from '../pc/shared/artistNames';
 import { useApp } from '../state';
 import { size, useTheme } from '../theme';
 import { IconHeart, IconSearch, IconWave } from '../ui/icons';
-import { AlbumCard, ArtistBubble, Chip, Cover, EmptyState, H1, SectionHead, Txt } from '../ui/kit';
+import { AlbumCard, ArtistBubble, Chip, Cover, EmptyState, H1, SectionHead, Txt,Btn,TrackRow } from '../ui/kit';
 import { Page } from '../ui/Page';
 
 type Filter = 'all' | 'mine' | 'new' | 'albums';
@@ -36,6 +36,7 @@ export function HomeScreen() {
   const { width } = useWindowDimensions();
   const a = useActions();
   const nav = useNavigation<NavigationProp<StackParams & TabParams>>();
+  const [chart,setChart]=useState<Candidate[]>([]),[chartBusy,setChartBusy]=useState(false);
   const [filter, setFilter] = useState<Filter>('all');
 
   const data = useMemo(() => {
@@ -124,7 +125,7 @@ export function HomeScreen() {
   );
   const favSection = data.favArtists.length > 0 && (
     <View>
-      <SectionHead title="Избранные артисты" action="Все" onAction={() => nav.navigate('Fav', { screen: 'FavRoot' })} />
+      <SectionHead title="Избранные артисты" action="Все" onAction={() => nav.getParent()?.getParent()?.navigate('FavArtists')} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: size.space * 2 }} style={{ marginHorizontal: -size.pageX }} contentInset={{ left: size.pageX, right: size.pageX }} contentOffset={{ x: -size.pageX, y: 0 }}>
         {data.favArtists.map((fa) => (
           <ArtistBubble key={fa.key} name={fa.name} thumbnail={fa.thumbnail} fallback={fa.releases[0]?.thumbnail} fresh={!!fa.fresh} onPress={() => a.openArtist(fa.name, fa.ytId)} />
@@ -212,6 +213,7 @@ export function HomeScreen() {
           ))}
         </ScrollView>
       </View>
+      {filter==='all'&&<View style={{gap:16}}><SectionHead title='Для тебя'/><Btn title='Моя волна' onPress={()=>{const seeds=[...profile.favorites(),...data.recent].filter(x=>!profile.isHidden(x));if(seeds.length)void a.radio(seeds[Math.floor(Math.random()*seeds.length)]);else say('Добавь любимую песню, чтобы подобрать микс');}}/><Btn title={chartBusy?'Загружаю…':'Мировой чарт'} disabled={chartBusy} onPress={()=>{setChartBusy(true);void api.charts().then(r=>setChart(r?.songs||[])).catch(()=>say('Чарт сейчас недоступен')).finally(()=>setChartBusy(false));}}/>{chart.slice(0,10).map((x,i)=><TrackRow key={x.id} c={x} onPress={()=>a.play(chart,i,'Мировой чарт')} menu={()=>a.menu(x)}/>)}</View>}
       {body}
     </Page>
   );

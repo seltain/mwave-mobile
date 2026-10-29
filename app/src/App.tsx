@@ -1,10 +1,15 @@
+import {NativeAcceptance,nativeAcceptance} from './native-acceptance';
 import {openDatabaseAsync} from 'expo-sqlite';
 // mwave для iPhone. Внизу стеклянная капсула навигации (4 вкладки) и над ней плеер; поверх «Сейчас играет» и очередь.
 // Тема по системе (тёмная или светлая), шрифт Onest, цвета из общей палитры проекта ПК.
 // Ссылки mwave://... открывают экраны (для снимков экрана в симуляторе на сборке):
 //   mwave://home, mwave://search?q=PHARAOH, mwave://library?tab=playlists, mwave://fav,
 //   mwave://search/artist?name=PHARAOH, mwave://search/album?id=..., mwave://now, mwave://queue, mwave://play?q=...
-import { InterTight_400Regular, InterTight_500Medium, InterTight_600SemiBold, InterTight_800ExtraBold, useFonts } from '@expo-google-fonts/inter-tight';
+import {useFonts} from 'expo-font';
+import {InterTight_400Regular} from '@expo-google-fonts/inter-tight/400Regular';
+import {InterTight_500Medium} from '@expo-google-fonts/inter-tight/500Medium';
+import {InterTight_600SemiBold} from '@expo-google-fonts/inter-tight/600SemiBold';
+import {InterTight_800ExtraBold} from '@expo-google-fonts/inter-tight/800ExtraBold';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNavigationContainerRef, DarkTheme, DefaultTheme, NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -138,4 +143,4 @@ function Main() {
 }
 
 function LibraryGate({accountId,children}:{accountId:string;children:React.ReactNode}){const[ready,setReady]=useState(false),[error,setError]=useState('');useEffect(()=>{let active=true,db:Awaited<ReturnType<typeof openDatabaseAsync>>|undefined;void openDatabaseAsync('mwave-account-'+accountId+'.db').then(x=>{db=x;if(active)setReady(true);else void x.closeAsync();}).catch(e=>active&&setError(String(e)));return()=>{active=false;if(db)void db.closeAsync();};},[accountId]);if(!ready)return <View style={{flex:1,backgroundColor:'#101012'}}>{!!error&&<AccountLogin/>}</View>;return <AppProvider accountId={accountId}>{children}</AppProvider>;}
-export default function App(){const [fontsLoaded]=useFonts({InterTight_400Regular,InterTight_500Medium,InterTight_600SemiBold,InterTight_800ExtraBold});const t=useTheme(),identity=useIdentity(),[ready,setReady]=useState(false);useEffect(()=>{void sessions.hydrate().finally(()=>setReady(true));},[]);if(!fontsLoaded||!ready)return <View style={{flex:1,backgroundColor:t.c.bg}}/>;return <SafeAreaProvider>{identity.account?<LibraryGate key={identity.account.id+':'+identity.generation} accountId={identity.account.id}><Main/></LibraryGate>:<AccountLogin/>}</SafeAreaProvider>;}
+export default function App(){const [fontsLoaded]=useFonts({InterTight_400Regular,InterTight_500Medium,InterTight_600SemiBold,InterTight_800ExtraBold});const t=useTheme(),identity=useIdentity(),[ready,setReady]=useState(false);useEffect(()=>{void sessions.hydrate().finally(()=>setReady(true));},[]);if(nativeAcceptance&&fontsLoaded)return <SafeAreaProvider><NativeAcceptance/></SafeAreaProvider>;if(!fontsLoaded||!ready)return <View style={{flex:1,backgroundColor:t.c.bg}}/>;return <SafeAreaProvider>{identity.account?<LibraryGate key={identity.account.id+':'+identity.generation} accountId={identity.account.id}><Main/></LibraryGate>:<AccountLogin/>}</SafeAreaProvider>;}

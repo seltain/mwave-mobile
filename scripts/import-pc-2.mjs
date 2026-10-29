@@ -1,12 +1,13 @@
 // Read-only import of the approved desktop snapshot. Platform adapters stay in this repository.
-import {readFileSync,writeFileSync,existsSync,mkdirSync} from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {createHash} from 'node:crypto';
+import {readFileSync,writeFileSync,existsSync,mkdirSync,readdirSync,unlinkSync} from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {createHash} from 'node:crypto';
 const root=path.resolve(import.meta.dirname,'..'),pc=path.resolve(process.env.MWAVE_PC_ROOT||path.join(root,'../music-circle-v2'));
 if(!existsSync(path.join(pc,'src/main/profile/db.ts')))throw Error('Set MWAVE_PC_ROOT to the desktop project');
-const app=['shared/theme.ts','shared/accounts.ts','shared/searchRank.ts','shared/artistNames.ts','shared/format.ts','shared/audio.ts','renderer/src/queueLogic.ts','main/resolver/types.ts','main/resolver/match.ts','main/artist/types.ts','main/artist/ytmArtist.ts','main/resolver/providers/innertube.ts','main/profile/profileStore.ts','main/profile/db.ts','main/sync/schema.ts','main/sync/journal.ts','main/sync/project.ts','main/accounts/client.ts'];
-const server=['main/resolver/index.ts','main/artist/artistService.ts','main/radio.ts','main/streamCache.ts','main/streamProxy.ts','main/playbackFallback.ts'];
+const app=['shared/theme.ts','shared/accounts.ts','shared/searchRank.ts','shared/artistNames.ts','shared/format.ts','shared/audio.ts','shared/lyrics.ts','shared/charts.ts','renderer/src/queueLogic.ts','main/resolver/types.ts','main/resolver/match.ts','main/artist/types.ts','main/artist/ytmArtist.ts','main/resolver/providers/innertube.ts','main/profile/profileStore.ts','main/profile/db.ts','main/sync/schema.ts','main/sync/journal.ts','main/sync/project.ts','main/accounts/client.ts'];
+const server=['shared/artistNames.ts','main/resolver/index.ts','main/artist/artistService.ts','main/radio.ts','main/streamCache.ts','main/streamProxy.ts','main/playbackFallback.ts','main/lyrics.ts','main/charts.ts'];
 const hashes={};
 function copy(rel,target,mobile,seen=new Set()){
  if(seen.has(rel))return;seen.add(rel);const source=path.join(pc,'src',rel);let text=readFileSync(source,'utf8');hashes[rel]=createHash('sha256').update(text).digest('hex');
+ if(rel==='shared/charts.ts')text=text.replace("from './ipc'","from '../main/resolver/types'");
  if(mobile&&rel==='main/profile/db.ts'){
   const types=text.slice(text.indexOf('type Params'),text.indexOf('/** Если передан'));
   const migrations=text.slice(text.indexOf('const MIGRATIONS:'),text.indexOf('/** Открывает'));
@@ -26,4 +27,5 @@ function copy(rel,target,mobile,seen=new Set()){
  }
 }
 const appSeen=new Set(),serverSeen=new Set();for(const rel of app)copy(rel,path.join(root,'app/src/pc'),true,appSeen);for(const rel of server)copy(rel,path.join(root,'server/src/pc'),false,serverSeen);
-const commit=execFileSync('git',['-C',pc,'rev-parse','HEAD'],{encoding:'utf8'}).trim();mkdirSync(path.join(root,'docs'),{recursive:true});writeFileSync(path.join(root,'docs/PC-SNAPSHOT.json'),JSON.stringify({commit,sha256:hashes},null,2));console.log(`Desktop snapshot ${commit}: app ${appSeen.size}, server ${serverSeen.size}; desktop unchanged`);
+for(const [folder,seen] of [[path.join(root,'app/src/pc'),appSeen],[path.join(root,'server/src/pc'),serverSeen]]){for(const ent of readdirSync(folder,{recursive:true,withFileTypes:true})){if(!ent.isFile())continue;const file=path.join(ent.parentPath,ent.name),rel=path.relative(folder,file).replaceAll('\\','/');if(!seen.has(rel)&&readFileSync(file,'utf8').startsWith('// Desktop 2.0 snapshot:'))unlinkSync(file);}}
+const commit=execFileSync('git',['-C',pc,'rev-parse','HEAD'],{encoding:'utf8'}).trim();mkdirSync(path.join(root,'docs'),{recursive:true});writeFileSync(path.join(root,'docs/PC-SNAPSHOT.json'),JSON.stringify({commit,mobileFiles:[...appSeen],serverFiles:[...serverSeen],sha256:hashes},null,2));console.log(`Desktop snapshot ${commit}: app ${appSeen.size}, server ${serverSeen.size}; desktop unchanged`);

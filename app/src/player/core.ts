@@ -58,7 +58,8 @@ export interface PlayerDeps {
   /** Песни, звучавшие недавно (волна их не повторяет). */
   recent(): Candidate[];
   /** Песня «прослушана» (30 секунд или половина короткой): в историю. */
-  onListened(c: Candidate): void;
+  onListened(c: Candidate,seconds:number): number|void;
+  onPlayed?(playId:number,seconds:number):void;
   savePref(name: 'shuffle' | 'repeat' | 'endless', value: string): void;
   now?: () => number;
 }
@@ -106,7 +107,9 @@ export class Player {
   private listenedKey: string | null = null;
   private radioAskedFor: string | null = null;
   private retried: string | null = null;
+  private fallbackRetry=false;
   private disposed=false;
+  private heard=0;private playId:number|void=undefined;private lastPosition=0;private wasPlaying=false;private savedHeard=0;
   private loading=false;
   private inflight=new Map<string,Promise<PrepareResponse>>();
   private links = new Map<string, { at: number; res: PrepareResponse & { ok: true } }>();
@@ -152,6 +155,7 @@ export class Player {
 
   dispose(): void {
     if(this.disposed)return;this.disposed=true;this.token++;
+    this.savePlayed();
     this.unsub();
     this.engine.stop();
     this.engine.dispose?.();this.listeners.clear();this.links.clear();
@@ -163,7 +167,7 @@ export class Player {
     const hit = this.links.get(k);
     if (!fresh && hit && this.now() - hit.at < LINK_TTL_MS && (hit.res.expiresAt??Infinity)>this.now()+30000) return hit.res;
     if(!fresh&&this.inflight.has(k))return this.inflight.get(k)!;
-    const task=this.deps.prepare(c,{fresh,failedSource:fresh?this.current?.playing?.source:undefined});this.inflight.set(k,task);
+    const task=this.deps.prepare(c,{fresh,failedSource:fresh&&this.fallbackRetry?this.current?.playing?.source:undefined});this.inflight.set(k,task);
     let res:PrepareResponse;try{res=await task;}finally{if(this.inflight.get(k)===task)this.inflight.delete(k);}
     if (res.ok) {
       this.links.set(k, { at: this.now(), res });
@@ -186,9 +190,10 @@ export class Player {
     const it = this.st.items[i];
     if (!it) return;
     const token = ++this.token;
-    this.loading=true;this.engine.pause();if(!fresh)this.retried=null;
+    if(!fresh){this.savePlayed();this.heard=0;this.savedHeard=0;this.playId=undefined;this.listenedKey=null;}this.lastPosition=startAt;this.wasPlaying=false;
+    this.loading=true;this.engine.pause();if(!fresh){this.retried=null;this.fallbackRetry=false;}
     if (startAt === 0) this.listenedKey = null;
-    this.set({ index: i, time: startAt, duration: it.candidate.duration ?? 0 });
+    this.set({ index: i,isPlaying:false, time: startAt, duration: it.candidate.duration ?? 0 });
     this.patchItem(it.key, { status: 'loading', note: undefined });
     let res: PrepareResponse;
     try {
@@ -214,6 +219,8 @@ export class Player {
 
   private onStatus(s: EngineStatus): void {
     if(this.disposed||this.loading)return;
+    const delta=s.time-this.lastPosition;if(this.wasPlaying&&delta>0&&delta<2)this.heard+=delta;this.lastPosition=s.time;this.wasPlaying=s.playing;
+    if(this.heard-this.savedHeard>=15||!s.playing)this.savePlayed();
     const cur = this.current;
     this.set({ isPlaying: s.playing, time: s.time, duration: trustedDuration(s.duration, cur && (cur.playing ?? cur.candidate).duration) || this.st.duration });
     if (!cur) return;
@@ -222,6 +229,9 @@ export class Player {
       if (this.retried !== cur.key) {
         this.retried = cur.key;
         void this.playAt(this.st.index, s.time, true);
+      } else if(!this.fallbackRetry){
+        this.fallbackRetry=true;
+        void this.playAt(this.st.index,s.time,true);
       } else {
         this.patchItem(cur.key, { status: 'unavailable', note: 'Источник сейчас недоступен' });
         this.goNext(false);
@@ -232,12 +242,13 @@ export class Player {
       this.goNext(false);
       return;
     }
-    if (cur.status === 'playing' && this.listenedKey !== cur.key && s.time >= Math.min(LISTENED_SECONDS, (s.duration || Infinity) / 2)) {
+    if (cur.status === 'playing' && this.listenedKey !== cur.key && this.heard >= Math.min(LISTENED_SECONDS, (this.st.duration || Infinity) / 2)) {
       this.listenedKey = cur.key;
-      this.deps.onListened(cur.playing ?? cur.candidate);
+      this.playId=this.deps.onListened(cur.playing ?? cur.candidate,this.heard);
     }
     this.maybeRadio();
   }
+  private savePlayed(){if(typeof this.playId==='number'){this.deps.onPlayed?.(this.playId,Math.round(this.heard));this.savedHeard=this.heard;}}
 
   /** Волна: только когда место заканчивается (осталась последняя песня) и повтор выключен. */
   private maybeRadio(): void {
@@ -267,6 +278,7 @@ export class Player {
     if (nx === q) {
       // Повтор одной песни
       this.listenedKey = null;
+      this.savePlayed();this.heard=0;this.savedHeard=0;this.playId=undefined;this.lastPosition=0;
       this.engine.seek(0);
       this.engine.play();
       return;
@@ -360,6 +372,7 @@ export class Player {
     else void this.playAt(this.st.index - 1);
   }
   seek(t: number): void {
+    this.lastPosition=t;
     this.engine.seek(t);
     this.set({ time: t });
   }

@@ -1,25 +1,11 @@
-# Сборка неподписанного IPA mwave для iPhone (arm64). Основа: проверенная сборка Cabbit iOS Test
-# (те же macos-15, Xcode 16.4, Node 22.14.0, Ruby 3.3.7, CocoaPods 1.16.2, expo prebuild + xcodebuild без подписи).
-# Запуск только вручную (Actions -> Build iPhone IPA -> Run workflow), чтобы не тратить минуты macOS.
-# Ключ сервиса в приложение НЕ вшивается: его вводят на iPhone при первом запуске (репозиторий и сборки публичные).
-# Секрет MWAVE_KEY нужен только шагу снимков: ключ вводится в симулятор после сборки и в IPA не попадает.
 name: Build iPhone IPA
-
 on:
   workflow_dispatch:
-    inputs:
-      screenshots:
-        description: 'Снимки экранов в симуляторе iPhone (ещё около 10 минут)'
-        type: boolean
-        default: false
-
 permissions:
   contents: read
-
 concurrency:
   group: mwave-ios-${{ github.ref }}
-  cancel-in-progress: true
-
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: macos-15
@@ -33,98 +19,98 @@ jobs:
       NODE_ENV: production
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '22.14.0'
+          node-version: '24.17.0'
           cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: Ruby and Bundler
-        uses: ruby/setup-ruby@v1
+          cache-dependency-path: |
+            app/package-lock.json
+            server/package-lock.json
+      - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3.7'
           bundler: '2.6.9'
-
-      - name: Install dependencies
+      - name: Dependencies
         run: |
           test -d "$DEVELOPER_DIR"
-          xcodebuild -version
           npm ci --include=dev
           bundle install --jobs 4 --retry 3
-          bundle exec pod --version
-
-      - name: Checks (TypeScript, Expo versions, tests)
+      - name: Cache browser for fixture acceptance
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-1.56.1-macos
+      - name: Types, offline tests, web acceptance
         run: |
           npm run typecheck
           npm run check:dependencies
-          node --import tsx --test test/*.test.ts
+          npm test
+          npm run check:native
           python3 -m unittest discover -s scripts -p 'test_*.py'
-
-      - name: Generate iOS project
+          npx playwright install chromium
+          npm run test:web
+          cd ../server
+          npm ci --include=dev
+          npm run typecheck
+          npm test
+      - name: Generate iOS
         run: npm run prebuild:ios
-
       - name: Cache CocoaPods
         uses: actions/cache@v4
         with:
           path: |
             app/ios/Pods
             ~/Library/Caches/CocoaPods
-          key: pods-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/app.json', 'app/modules/**/*.podspec') }}
-
-      - name: Install iOS pods
-        run: bundle exec pod install --project-directory=ios
-
+          key: pods-16.4-${{ hashFiles('app/package-lock.json', 'app/app.json', 'app/modules/**/*.podspec') }}
+      - name: Install pods and verify native module
+        run: |
+          bundle exec pod install --project-directory=ios
+          npm run check:native
+      - name: Cache Xcode
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/build/derived-device
+            app/build/sim-derived
+          key: xcode-16.4-${{ hashFiles('app/package-lock.json', 'app/app.json', 'app/modules/**/*') }}
+      - name: Native simulator acceptance on synthetic audio
+        run: |
+          START=$(date +%s)
+          bash scripts/simulator-screens.sh
+          printf '{"simulatorBuildAndChecksSeconds":%s}\n' "$(( $(date +%s)-START ))" > build/simulator-times.json
       - name: Compile device Release and package IPA
         run: bash scripts/build-ios-unsigned.sh
-
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: mwave-ipa-${{ github.run_number }}
+          name: mwave-2.0.0-ipa-${{ github.run_number }}
           path: |
             app/build/mwave-unsigned.ipa
             app/build/mwave-unsigned.ipa.sha256
             app/build/ipa-validation.json
             app/build/build-environment.txt
+            app/build/build-times.json
+            app/build/simulator-times.json
           if-no-files-found: error
           retention-days: 30
-
-      - name: Screenshots in iPhone simulator
-        if: ${{ inputs.screenshots }}
-        env:
-          MWAVE_KEY: ${{ secrets.MWAVE_KEY }}
-        run: bash scripts/simulator-screens.sh
-
-      - name: Upload screenshots
-        if: ${{ always() && inputs.screenshots }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: mwave-screens-${{ github.run_number }}
-          path: |
-            app/build/screens/*.png
-            app/build/screens/log.txt
-            app/build/screens/xcodebuild-sim.log
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload build logs (also on failure)
+      - name: Upload acceptance and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mwave-build-logs-${{ github.run_number }}
+          name: mwave-acceptance-${{ github.run_number }}
           path: |
+            app/build/screens/native-qa.json
+            app/build/screens/hls-requests.json
+            app/build/screens/native-acceptance.png
+            app/build/screens/xcodebuild-sim.log
             app/build/xcodebuild.log
-            app/build/build-environment.txt
+            app/build/web-results.json
+            app/build/web-*.png
+            app/test-results/
             app/ios/Podfile.lock
-          if-no-files-found: ignore
-          retention-days: 7
-
+          retention-days: 14
       - name: Summary
         run: |
-          echo '### mwave: IPA для iPhone собран' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Скачать: артефакт mwave-ipa (ZIP), внутри mwave-unsigned.ipa. Установить через Sideloadly с бесплатным Apple ID.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Ключа сервера в IPA нет: приложение спросит его при первом запуске.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'mwave 2.0.0: unsigned device IPA. Install with Sideloadly; re-sign every 7 days with a free Apple ID.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Physical iPhone lockscreen, background and headphone acceptance remains required.' >> "$GITHUB_STEP_SUMMARY"

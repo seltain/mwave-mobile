@@ -1,9 +1,9 @@
+import {importLegacy} from './legacy-import';
 import {backupDatabaseAsync,openDatabaseSync,defaultDatabaseDirectory} from 'expo-sqlite';import * as FileSystem from 'expo-file-system/legacy';import type {Profile} from './profile';
 /** Explicit, once per account; the legacy file is never used as the account database. */
 export async function migrateLegacy(profile:Profile){if(profile.db.prepare("SELECT 1 FROM settings WHERE key='mobile.legacy.imported'").get())throw Error('Пробный профиль уже перенесён');
  const sourceFile=defaultDatabaseDirectory+'/mwave.db';const exists=await FileSystem.getInfoAsync(sourceFile);if(!exists.exists)throw Error('Пробного профиля на этом iPhone нет');
  const old=openDatabaseSync('mwave.db'),copyName='mwave-before-account-'+Date.now()+'.db',copy=openDatabaseSync(copyName);
  try{await backupDatabaseAsync({sourceDatabase:old,destDatabase:copy});if(copy.getFirstSync<{integrity_check:string}>('PRAGMA integrity_check')?.integrity_check!=='ok')throw Error('Копия не прошла проверку');
- const liked=old.getAllSync<{track:string}>('SELECT track FROM favorites'),lists=old.getAllSync<{id:number;name:string}>('SELECT id,name FROM playlists ORDER BY id'),history=old.getAllSync<{track:string;played_at:number}>('SELECT track,played_at FROM history ORDER BY played_at,id'),artists=old.getAllSync<any>('SELECT * FROM fav_artists');
- profile.db.transaction(()=>{for(const row of liked){const c=JSON.parse(row.track);if(!profile.favoriteKeys().has(c.source+':'+c.id))profile.toggleFavorite(c);}for(const p of lists){const id=profile.createPlaylist(p.name);for(const row of old.getAllSync<{track:string}>('SELECT track FROM playlist_items WHERE playlist_id=? ORDER BY id',p.id))profile.addToPlaylist(id,JSON.parse(row.track));}for(const h of history)profile.addHistory(JSON.parse(h.track),h.played_at);for(const a of artists)if(!profile.isFavArtist({name:a.name,ytId:a.yt_id}))profile.toggleFavArtist({name:a.name,ytId:a.yt_id,thumbnail:a.thumbnail,releases:JSON.parse(a.releases||'[]')});profile.db.prepare("INSERT INTO settings VALUES('mobile.legacy.imported',?)").run(copyName);})();return {backup:copyName,favorites:liked.length,playlists:lists.length,history:history.length};
+ return importLegacy(profile,{all:(query,...params)=>old.getAllSync(query,params)},copyName);
  }finally{copy.closeSync();old.closeSync();}}

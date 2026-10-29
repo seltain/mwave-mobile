@@ -38,7 +38,8 @@ export function SearchScreen() {
 
   function run(raw: string) {
     const q = raw.trim();
-    if (q.length < 2 || q === searched) return;
+    if(q.length<2){seq.current++;setSearched('');setYt([]);setSc([]);setArtists([]);setAlbums([]);setLoading({yt:false,sc:false,more:false});return;}
+    if(q===searched)return;
     const n = ++seq.current;
     setSearched(q);
     setError('');
@@ -126,7 +127,7 @@ export function SearchScreen() {
           autoCorrect={false}
           autoCapitalize="none"
           clearButtonMode="while-editing"
-          style={{ flex: 1, color: c.text, fontFamily: 'Onest_400Regular', fontSize: 16 }}
+          style={{ flex: 1, color: c.text, fontFamily: 'InterTight_400Regular', fontSize: 16 }}
         />
       </View>
       {!!error && <Txt sub>{error}</Txt>}

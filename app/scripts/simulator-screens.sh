@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Снимки экранов mwave в симуляторе iPhone (только на macOS, после expo prebuild и pod install).
 # Собирает приложение для симулятора, ставит, включает тёмную и светлую тему, открывает экраны ссылками mwave://
-# и снимает экран. Данные настоящие: симулятор ходит на сервер mwave, звук в симуляторе тоже играет.
+# и снимает экран. Данные записаны, звук синтетический. Внешние музыкальные источники не используются.
 # Результат: build/screens/<экран>-<тема>.png и build/screens/log.txt
 set -euo pipefail
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -49,42 +49,45 @@ xcrun simctl boot "$DEVICE" || true
 xcrun simctl bootstatus "$DEVICE" -b
 xcrun simctl install "$DEVICE" "$APP"
 
-snap() { xcrun simctl io "$DEVICE" screenshot "$OUT/$1.png" >/dev/null 2>&1 && say "снимок $1"; }
-# Экран открывается новым запуском с аргументами -mwaveKey и -mwaveOpen (см. src/launchArgs.ts).
-# Ссылки через simctl openurl не годятся: iOS спрашивает «Open in mwave?».
-open_screen() { # имя снимка, ссылка mwave://, сколько ждать
-  xcrun simctl terminate "$DEVICE" app.mwave.mobile >/dev/null 2>&1 || true
-  xcrun simctl launch "$DEVICE" app.mwave.mobile -mwaveKey "${MWAVE_KEY:-}" -mwaveOpen "$2" >/dev/null
-  sleep "$3"
-  snap "$1"
-}
-
-# Первый запуск: ключа в приложении нет, экран ввода ключа (в обеих темах)
-for THEME in light dark; do
-  xcrun simctl ui "$DEVICE" appearance "$THEME"
-  xcrun simctl terminate "$DEVICE" app.mwave.mobile >/dev/null 2>&1 || true
-  xcrun simctl launch "$DEVICE" app.mwave.mobile >/dev/null
-  sleep 6
-  snap "key-setup-$THEME"
+snap() { xcrun simctl io "$DEVICE" screenshot "$OUT/$1.png" >/dev/null 2>&1; }
+# A private TLS trust root is installed only in the disposable simulator.
+cat > "$OUT/tls.cnf" <<'CONF'
+[req]
+distinguished_name=dn
+x509_extensions=ext
+prompt=no
+[dn]
+CN=127.0.0.1
+[ext]
+subjectAltName=IP:127.0.0.1
+basicConstraints=critical,CA:TRUE
+keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign
+extendedKeyUsage=serverAuth
+CONF
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -config "$OUT/tls.cnf" -keyout "$OUT/tls.key" -out "$OUT/tls.crt" >/dev/null 2>&1
+chmod 600 "$OUT/tls.key"
+xcrun simctl keychain "$DEVICE" add-root-cert "$OUT/tls.crt"
+afconvert -f adts -d aac assets/fixture-tone.wav "$OUT/fixture.aac"
+FIXTURE_TLS_KEY="$OUT/tls.key" FIXTURE_TLS_CERT="$OUT/tls.crt" node scripts/native-audio-fixture.mjs > "$OUT/fixture-server.log" 2>&1 &
+FIXTURE_PID=$!
+trap 'kill "$FIXTURE_PID" 2>/dev/null || true' EXIT
+sleep 1
+xcrun simctl launch "$DEVICE" app.mwave.mobile -mwaveFixtures 1 -mwaveQA 1 >/dev/null
+DATA=$(xcrun simctl get_app_container "$DEVICE" app.mwave.mobile data)
+for i in $(seq 1 45); do
+  if test -f "$DATA/Documents/mwave-native-qa.json"; then break; fi
+  sleep 1
 done
-if [ -z "${MWAVE_KEY:-}" ]; then
-  say 'Нет MWAVE_KEY: дальше снимков нет'
-else
-  for THEME in dark light; do
-    xcrun simctl ui "$DEVICE" appearance "$THEME"
-    [ "$THEME" = dark ] && open_screen "home-empty-$THEME" 'mwave://home' 8
-    open_screen "search-$THEME" 'mwave://search?q=PHARAOH' 14
-    open_screen "artist-$THEME" 'mwave://search/artist?name=PHARAOH' 14
-    # 40 с: песня успевает стать «прослушанной» и попадает в историю (для главной и медиатеки)
-    open_screen "now-playing-$THEME" 'mwave://play?q=PHARAOH%20Дико%20например&show=now' 40
-    open_screen "queue-$THEME" 'mwave://play?q=Kai%20Angel&show=queue' 15
-    open_screen "home-$THEME" 'mwave://home' 8
-    open_screen "library-$THEME" 'mwave://library?tab=history' 6
-    open_screen "fav-$THEME" 'mwave://fav' 6
-  done
-fi
-# Журнал приложения (ошибки JavaScript попадают сюда)
-# Ключ из журнала вырезается: артефакты публичного репозитория видны всем, а GitHub скрывает секреты только в выводе шагов
-xcrun simctl spawn "$DEVICE" log show --last 15m --predicate 'process == "mwave"' --style compact 2>/dev/null | grep -iE 'error|exception|fatal'   | grep -v 'setup?key' | { if [ -n "${MWAVE_KEY:-}" ]; then grep -vF "$MWAVE_KEY"; else cat; fi; } | tail -40 >> "$LOG" || true
-say 'Готово'
-ls -la "$OUT" | tee -a "$LOG"
+cp "$DATA/Documents/mwave-native-qa.json" "$OUT/native-qa.json"
+snap native-acceptance
+python3 - "$OUT" <<'PY'
+import json,sys,pathlib
+p=pathlib.Path(sys.argv[1])
+qa=json.loads((p/'native-qa.json').read_text())
+hls=json.loads((p/'hls-requests.json').read_text())
+assert qa['ok'],qa
+assert hls['playlist']>=1 and hls['segment']>=1,hls
+assert hls['denied']==0,hls
+print(json.dumps({'native':qa,'hls':hls},indent=2))
+PY
+say 'Native module, AVPlayer, next/previous event bridge, seek, pause and authenticated HLS passed'

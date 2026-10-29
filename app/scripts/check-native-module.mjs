@@ -1,0 +1,4 @@
+import{execFileSync}from'node:child_process';import{existsSync,readFileSync}from'node:fs';
+for(const file of ['modules/mwave-remote/ios/MwaveRemoteModule.swift','modules/mwave-remote/ios/MwaveRemote.podspec']){if(!existsSync(file))throw Error('Missing '+file);execFileSync('git',['ls-files','--error-unmatch',file],{stdio:'pipe'});}
+const result=execFileSync(process.execPath,['node_modules/expo-modules-autolinking/bin/expo-modules-autolinking','resolve','--platform','apple'],{encoding:'utf8'});if(!result.includes('MwaveRemote'))throw Error('MwaveRemote not resolved by Expo autolinking');
+if(existsSync('ios/Podfile.lock')&&!readFileSync('ios/Podfile.lock','utf8').includes('MwaveRemote'))throw Error('MwaveRemote missing from Pods');console.log('Tracked Swift + podspec + Expo autolinking checked');

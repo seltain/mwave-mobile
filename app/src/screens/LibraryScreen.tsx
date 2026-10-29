@@ -118,7 +118,7 @@ export function LibraryScreen() {
   }
 
   return (
-    <Page>
+    <Page testID="library">
       <H1>Медиатека</H1>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: size.space }}>
         {TABS.map(([id, label]) => (
@@ -140,7 +140,7 @@ export function PlaylistScreen() {
   const { params } = useRoute<RouteProp<StackParams, 'Playlist'>>();
   const pl = useMemo(() => profile.playlists().find((p) => p.id === params.id), [profile, rev, params.id]);
   const items = useMemo(() => profile.playlistTracks(params.id), [profile, rev, params.id]);
-  if (!pl) return <Page><EmptyState title="Плейлиста больше нет" /></Page>;
+  if (!pl) return <Page testID="playlist"><EmptyState title="Плейлиста больше нет" /></Page>;
   const tracks = items.map((i) => i.track);
   const from = `Плейлист «${pl.name}»`;
   const nowKey = st.index >= 0 ? trackKey(st.items[st.index].playing ?? st.items[st.index].candidate) : '';
@@ -154,7 +154,7 @@ export function PlaylistScreen() {
         ]);
     });
   return (
-    <Page>
+    <Page testID="playlist">
       <Hero image={<Cover uri={pl.cover} letter={pl.name} px={200} radius={size.radiusCover} />} kind="Плейлист" title={pl.name} sub={<Txt sub>{tracks.length} шт.</Txt>}>
         <PlayButtons
           tracks={tracks}

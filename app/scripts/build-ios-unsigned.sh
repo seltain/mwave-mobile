@@ -17,6 +17,8 @@ BUILD_DIR="$PROJECT_ROOT/build"
 mkdir -p "$BUILD_DIR"
 # Separate output directory on each invocation; never package an old .app.
 RUN_DIR="$(mktemp -d "$BUILD_DIR/unsigned.XXXXXX")"
+DERIVED="$PROJECT_ROOT/build/derived-device"
+BUILD_STARTED=$(date +%s)
 export NODE_ENV=production
 export NODE_BINARY="$(command -v node)"
 export RCT_NO_LAUNCH_PACKAGER=1
@@ -35,13 +37,14 @@ unset SKIP_BUNDLING
   bundle exec pod --version
 } > "$BUILD_DIR/build-environment.txt"
 
+rm -rf "$DERIVED/Build/Products/Release-iphoneos/mwave.app"
 xcodebuild \
   -workspace ios/mwave.xcworkspace \
   -scheme mwave \
   -configuration Release \
   -sdk iphoneos \
   -destination 'generic/platform=iOS' \
-  -derivedDataPath "$RUN_DIR/DerivedData" \
+  -derivedDataPath "$DERIVED" \
   -resultBundlePath "$RUN_DIR/Build.xcresult" \
   ARCHS=arm64 \
   ONLY_ACTIVE_ARCH=NO \
@@ -51,7 +54,7 @@ xcodebuild \
   'DEVELOPMENT_TEAM=' \
   build 2>&1 | tee "$BUILD_DIR/xcodebuild.log"
 
-APP_PATH="$RUN_DIR/DerivedData/Build/Products/Release-iphoneos/mwave.app"
+APP_PATH="$DERIVED/Build/Products/Release-iphoneos/mwave.app"
 test -d "$APP_PATH"
 test -s "$APP_PATH/main.jsbundle"
 
@@ -99,3 +102,5 @@ cp "$RUN_DIR/mwave-unsigned.ipa" "$BUILD_DIR/mwave-unsigned.ipa"
 cp "$RUN_DIR/ipa-validation.json" "$BUILD_DIR/ipa-validation.json"
 (cd "$BUILD_DIR" && shasum -a 256 mwave-unsigned.ipa > mwave-unsigned.ipa.sha256)
 printf 'Unsigned device IPA validated: %s\n' "$BUILD_DIR/mwave-unsigned.ipa"
+
+printf '{"deviceBuildSeconds":%s}\n' "$(( $(date +%s)-BUILD_STARTED ))" > "$BUILD_DIR/build-times.json"

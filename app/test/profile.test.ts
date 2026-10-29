@@ -105,3 +105,6 @@ test('настройки', () => {
   p.setPref('shuffle', '0');
   assert.equal(p.pref('shuffle'), '0');
 });
+
+
+test('legacy import preserves counts, order, timestamps and rolls back invalid data',async()=>{const{Profile:Legacy}=await import('../src/legacyProfile');const{importLegacy}=await import('../src/legacy-import');const raw=nodeSql(),legacy=new Legacy(raw);legacy.toggleFavorite(song('old'));const id=legacy.createPlaylist('Before');legacy.addToPlaylist(id,song('a'));legacy.addToPlaylist(id,song('b'));legacy.addHistory(song('old'));const next=new Profile(nodeSql()),result=importLegacy(next,raw,'verified-backup.db');assert.equal(result.items,2);assert.equal(next.favorites().length,1);assert.deepEqual(next.playlistTracks(next.playlists()[0].id).map(x=>x.track.id),['a','b']);assert.equal(next.history()[0].playedAt,legacy.history()[0].playedAt);const broken=new Profile(nodeSql());raw.run('UPDATE favorites SET track=?','{broken');assert.throws(()=>importLegacy(broken,raw,'backup.db'));assert.equal(broken.playlists().length,0);assert.equal(broken.favorites().length,0);});

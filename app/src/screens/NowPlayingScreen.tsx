@@ -1,3 +1,6 @@
+import {useEffect,useRef,useState} from 'react';
+import {Animated} from 'react-native';
+import {LyricsPanel} from '../ui/LyricsPanel';
 // «Сейчас играет» на весь экран (как на ПК 1.3): фон из размытой обложки с затемнением (в светлой теме
 // осветлением), большая обложка, перемотка пальцем, перемешать, назад, пауза, вперёд, повтор, волна, очередь.
 // И очередь с разделами: «Сейчас играет», «Далее в очереди», «Далее из: <место>», «Далее: волна».
@@ -23,12 +26,13 @@ export function NowPlayingScreen() {
   const { width } = useWindowDimensions();
   const cur = st.index >= 0 ? st.items[st.index] : undefined;
   const s = cur ? (cur.playing ?? cur.candidate) : undefined;
+  const[showLyrics,setShowLyrics]=useState(false),motion=useRef(new Animated.Value(0)).current;useEffect(()=>{const loop=Animated.loop(Animated.sequence([Animated.timing(motion,{toValue:1,duration:18000,useNativeDriver:true}),Animated.timing(motion,{toValue:0,duration:18000,useNativeDriver:true})]));loop.start();return()=>loop.stop();},[motion]);
   const coverSize = Math.min(width - size.pageX * 2 - 24, 360);
   const accentOr = (on: boolean) => (on ? c.accent : c.sub);
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
+    <View testID="now-playing" style={{ flex: 1, backgroundColor: c.bg }}>
       {/* Фон: та же обложка, сильно размытая; смена песни плавная (transition) */}
-      {s?.thumbnail && <Image source={sized(s.thumbnail, 160)} style={StyleSheet.absoluteFill} blurRadius={60} contentFit="cover" transition={600} />}
+      {s?.thumbnail && <Animated.View style={[StyleSheet.absoluteFill,{transform:[{scale:1.15},{translateX:motion.interpolate({inputRange:[0,1],outputRange:[-18,18]})}]}]}><Image source={sized(s.thumbnail,160)} style={StyleSheet.absoluteFill} blurRadius={60} contentFit="cover" transition={600}/></Animated.View>}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: t.npShade }]} />
       <View style={{ flex: 1, paddingTop: insets.top + size.space, paddingBottom: insets.bottom + size.space * 2, paddingHorizontal: size.pageX, gap: size.space * 3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -43,7 +47,7 @@ export function NowPlayingScreen() {
           </IconBtn>
         </View>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Cover uri={s?.thumbnail} letter={s?.title} px={coverSize} radius={size.radiusCover} />
+          {showLyrics&&s?<LyricsPanel song={s} time={st.time} duration={st.duration}/>:<Cover uri={s?.thumbnail} letter={s?.title} px={coverSize} radius={size.radiusCover} />}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: size.space * 2 }}>
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -59,7 +63,7 @@ export function NowPlayingScreen() {
               }}
             >
               <Txt sub size={16} lines={1}>
-                {s?.artist ?? ''}
+                {cur?.status==='unavailable'?(cur.note||'Источник сейчас недоступен'):s?.artist??''}
               </Txt>
             </Pressable>
           </View>
@@ -97,7 +101,7 @@ export function NowPlayingScreen() {
             <IconRepeat color={accentOr(st.repeat !== 'off')} one={st.repeat === 'one'} />
           </IconBtn>
         </View>
-        <View style={{ alignItems: 'center' }}>
+        <View style={{ alignItems: 'center',flexDirection:'row',justifyContent:'space-around' }}><Pressable accessibilityLabel="Текст песни" onPress={()=>setShowLyrics(!showLyrics)}><Txt weight="semibold" accent={showLyrics}>Текст</Txt></Pressable>
           <Pressable onPress={() => player.toggleEndless()} style={{ height: 36, paddingHorizontal: size.space * 2, borderRadius: size.pill, flexDirection: 'row', alignItems: 'center', gap: size.space, backgroundColor: st.endless ? c.accentSoft : 'transparent' }}>
             <IconWave color={st.endless ? c.accent : c.sub} />
             <Txt weight="semibold" size={13} style={{ color: st.endless ? c.accent : c.sub }}>

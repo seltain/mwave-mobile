@@ -22,6 +22,10 @@ public class MwaveRemoteModule: Module {
     }
     // CI exercises the same event bridge in a simulator. This method is absent on devices.
     #if targetEnvironment(simulator)
+    Function("saveQAResult") { (json: String) in
+      let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+      try json.write(to: folder.appendingPathComponent("mwave-native-qa.json"), atomically: true, encoding: .utf8)
+    }
     Function("simulateCommand") { (command: String) in
       if command == "next" { self.sendEvent("onRemoteNext", [:]) }
       if command == "previous" { self.sendEvent("onRemotePrevious", [:]) }

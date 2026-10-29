@@ -3,7 +3,7 @@
 // Ссылки mwave:// через simctl openurl не годятся: iOS спрашивает «Open in mwave?» и снимок получается с этим окном.
 import { Platform, Settings } from 'react-native';
 
-export function launchArg(name: 'mwaveKey' | 'mwaveOpen' | 'mwaveFixtures'): string | null {
+export function launchArg(name: 'mwaveKey' | 'mwaveOpen' | 'mwaveFixtures' | 'mwaveQA'): string | null {
   if (Platform.OS !== 'ios') return null;
   const v = Settings.get(name);
   return typeof v === 'string' && v ? v : null;

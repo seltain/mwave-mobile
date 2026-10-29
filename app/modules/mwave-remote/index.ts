@@ -5,6 +5,7 @@ import { requireOptionalNativeModule, type EventSubscription } from 'expo-module
 type RemoteModule = {
   isSimulator:boolean;
   setTimeline(elapsed:number,duration:number,playing:boolean):void;
+  saveQAResult?(json:string):void;
   simulateCommand?(name:string):void;
   setEnabled(enabled: boolean): void;
   addListener(event: 'onRemoteNext' | 'onRemotePrevious', cb: () => void): EventSubscription;
@@ -31,3 +32,5 @@ export const remoteAvailable=!!native;
 export const simulateRemote=(command:string)=>{if(isSimulator)native?.simulateCommand?.(command);};
 
 export function setRemoteTimeline(elapsed:number,duration:number,playing:boolean){native?.setTimeline(elapsed,duration,playing);}
+
+export const saveNativeQA=(result:unknown)=>{if(isSimulator)native?.saveQAResult?.(JSON.stringify(result));};

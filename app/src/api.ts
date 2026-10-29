@@ -77,6 +77,8 @@ export async function checkKey(key: string): Promise<boolean> {
 }
 
 export const api = {
+  lyrics:(candidate:Candidate)=>post<import('./pc/shared/lyrics').LyricsResult>('/api/lyrics',{candidate},15000),
+  charts:(country:import('./pc/shared/charts').ChartCountry='ZZ')=>post<import('./pc/shared/charts').ChartData|null>('/api/charts',{country},20000),
   search: (q: string, source: 'ytmusic' | 'soundcloud') => post<SearchResponse>('/api/search', { q, source }, source === 'soundcloud' ? 30_000 : 20_000),
   searchMore: (q: string) => post<MoreResponse>('/api/search/more', { q }),
   prepare: (candidate: Candidate,options:{fresh?:boolean;failedSource?:string}={}) => post<PrepareResponse>('/api/prepare', { candidate,...options }, 25_000),

@@ -4,6 +4,8 @@
 // Звук SoundCloud (HLS) телефон берёт напрямую: эти ссылки к IP не привязаны (проверено на этапе 0).
 // Доступ только с ключом (Authorization: Bearer ...). Слушает 127.0.0.1, наружу через nginx (HTTPS).
 import http from 'node:http';
+import {Lyrics} from './pc/main/lyrics.js';
+import {Charts} from './pc/main/charts.js';
 import {accountAuth,AuthUnavailable,type MusicIdentity} from './account-auth.js';
 import {AccountAudio} from './account-audio.js';
 import {playbackFallback} from './pc/main/playbackFallback.js';
@@ -73,6 +75,8 @@ const ytStreams = new Proxy(ytProvider, {
 const resolver = new Resolver([ytProvider, scProvider], [ytStreams, scProvider]);
 const streams = new StreamCache((c) => resolver.getStream(c));
 const artists = new ArtistService(fetchFn, scProvider);
+const lyrics=new Lyrics({dir:env.MWAVE_LYRICS_DIR||'/opt/mwave/cache/lyrics',fetchFn,ytSearch:ytProvider,version:VERSION});
+const charts=new Charts({dir:env.MWAVE_CHARTS_DIR||'/opt/mwave/cache/charts',fetchFn});
 const proxy = new StreamProxy(fetchFn);
 
 /** Ссылки на звук для телефона живут 6 часов (ссылка YouTube внутри обновляется сама при 403). */
@@ -266,6 +270,8 @@ const baseUrl = (req: http.IncomingMessage) => env.MWAVE_PUBLIC_URL ?? `http://$
 type Handler = (body: Record<string, unknown>, req: http.IncomingMessage) => Promise<unknown> | unknown;
 const HEAVY = true;
 const routes: Record<string, [Handler, boolean?]> = {
+  '/api/lyrics':[(b)=>{const c=cleanCandidate(b.candidate);return c?lyrics.get(c,c.duration):{kind:'none',offsetMs:0};},HEAVY],
+  '/api/charts':[(b)=>charts.get(b.country==='RU'||b.country==='US'?b.country:'ZZ',true),HEAVY],
   '/api/info': [() => ({ version: VERSION, ytdlp: ytdlpVersion(), uptimeSec: Math.round((Date.now() - started) / 1000), cache: streams.stats, ytdlpBusy: ytdlpSlots.busy, ytdlpWaiting: ytdlpSlots.waiting })],
   '/api/search': [(b) => searchSource(str(b.q, 200), b.source === 'soundcloud' ? 'soundcloud' : 'ytmusic'), HEAVY],
   '/api/search/more': [(b) => searchMore(str(b.q, 200)), HEAVY],

@@ -11,15 +11,15 @@ export function useBottomGap(): number {
   return Math.max(insets.bottom - 14, size.space) + size.tabBar + size.miniPlayer + size.space + size.edge * 2;
 }
 
-export function Page({ children, onRefresh, scroll = true }: { children: ReactNode; onRefresh?: () => Promise<void> | void; scroll?: boolean }) {
+export function Page({ children, onRefresh, scroll = true,testID }: {testID?:string; children: ReactNode; onRefresh?: () => Promise<void> | void; scroll?: boolean }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const bottom = useBottomGap();
   const [refreshing, setRefreshing] = useState(false);
   const pad = { paddingTop: insets.top + size.space * 2, paddingBottom: bottom, paddingHorizontal: size.pageX, gap: size.space * 4 };
-  if (!scroll) return <View style={[{ flex: 1, backgroundColor: c.bg }, pad]}>{children}</View>;
+  if (!scroll) return <View testID={testID} style={[{ flex: 1, backgroundColor: c.bg }, pad]}>{children}</View>;
   return (
-    <ScrollView
+    <ScrollView testID={testID}
       style={{ flex: 1, backgroundColor: c.bg }}
       contentContainerStyle={pad}
       keyboardShouldPersistTaps="handled"
