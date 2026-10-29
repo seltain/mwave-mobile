@@ -1,6 +1,6 @@
 {
   "name": "mwave-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "Сервис mwave для телефона (поиск, карточки, волна, звук). Код из проекта ПК: src/pc.",

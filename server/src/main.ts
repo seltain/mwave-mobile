@@ -4,6 +4,9 @@
 // Звук SoundCloud (HLS) телефон берёт напрямую: эти ссылки к IP не привязаны (проверено на этапе 0).
 // Доступ только с ключом (Authorization: Bearer ...). Слушает 127.0.0.1, наружу через nginx (HTTPS).
 import http from 'node:http';
+import {accountAuth,AuthUnavailable,type MusicIdentity} from './account-auth.js';
+import {AccountAudio} from './account-audio.js';
+import {playbackFallback} from './pc/main/playbackFallback.js';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { ArtistService } from './pc/main/artist/artistService.js';
@@ -25,13 +28,18 @@ import { setupLog } from './log.js';
 const env = process.env;
 const PORT = Number(env.MWAVE_PORT ?? 8780);
 const HOST = env.MWAVE_HOST ?? '127.0.0.1';
-const VERSION = '1.0.0';
+const VERSION = '2.0.0';
 setupLog(env.MWAVE_LOG_DIR);
 
 /** Секретный ключ: файл на сервере (права 600, владелец mwave). Без ключа сервис не запускается. */
 const TOKEN = readFileSync(env.MWAVE_TOKEN_FILE ?? '/opt/mwave/secret/token', 'utf8').trim();
 if (TOKEN.length < 32) throw new Error('Ключ слишком короткий (нужно не меньше 32 символов)');
 
+const allowLegacy=env.MWAVE_ALLOW_LEGACY_KEY!=='0';
+const authenticate=accountAuth({legacyKey:TOKEN,allowLegacy,base:env.MWAVE_ACCOUNTS_URL});
+const identities=new WeakMap<http.IncomingMessage,MusicIdentity>();
+const accountAudio=new AccountAudio();
+const audioRate=new RateLimit(600,60000);
 const tools: ToolPaths = {
   ytdlp: env.YTDLP_PATH ?? '/opt/mwave/bin/yt-dlp',
   ffmpeg: 'ffmpeg',
@@ -146,7 +154,8 @@ const REASON_TEXT: Record<string, string> = {
 };
 
 /** Ссылка для телефона: YouTube через этот сервер (подписанная), SoundCloud HLS напрямую. */
-function playable(stream: StreamInfo, c: Candidate, base: string): string {
+function playable(stream: StreamInfo, c: Candidate, base: string, owner?:string): string {
+  if(owner&&stream.protocol==='hls')return base+accountAudio.register(owner,stream.url,Math.min(stream.expiresAt||Infinity,Date.now()+20*60000),true);
   if (stream.protocol === 'hls') return stream.url;
   const local = proxy.register(stream, async () => {
     console.log(`[proxy] беру свежую ссылку для "${c.title}"`);
@@ -154,6 +163,7 @@ function playable(stream: StreamInfo, c: Candidate, base: string): string {
     const r = await streams.get(c);
     return r.ok ? r.stream : null;
   });
+  if(owner)return base+accountAudio.register(owner,local,Date.now()+3600000,false,true);
   const id = local.split('/s/')[1];
   localById.set(id, local);
   if (localById.size > 100) localById.delete(localById.keys().next().value!);
@@ -161,28 +171,11 @@ function playable(stream: StreamInfo, c: Candidate, base: string): string {
 }
 const localById = new Map<string, string>();
 
-async function prepare(c: Candidate, base: string) {
-  const t0 = Date.now();
-  const ready = !!streams.peek(c);
-  const direct = await streams.get(c);
-  console.log(`[prepare] ${c.source} "${c.title}": ссылка ${ready ? 'была готова' : 'получена'} за ${Date.now() - t0} мс`);
-  if (direct.ok) {
-    const st = direct.stream;
-    return { ok: true, url: playable(st, c, base), protocol: st.protocol, duration: st.duration ?? c.duration, playing: c };
-  }
-  const why = REASON_TEXT[direct.reason] ?? direct.reason;
-  const r = await resolver.resolve(wantedFromCandidate(c, direct.reason !== 'preview'));
-  if (r.status === 'ok') {
-    return {
-      ok: true,
-      url: playable(r.stream, r.chosen.candidate, base),
-      protocol: r.stream.protocol,
-      duration: r.stream.duration ?? r.chosen.candidate.duration,
-      playing: r.chosen.candidate,
-      fallbackReason: why,
-    };
-  }
-  return { ok: false, reason: r.status === 'not_found' ? 'not_found' : direct.reason, message: r.status === 'not_found' ? `${why}, замена не найдена` : `${why}, замены тоже не играют` };
+async function prepare(c: Candidate, base: string,owner?:string,fresh=false,failedSource?:Source) {
+  if(fresh)streams.forget(c);
+  const r=await playbackFallback(c,{direct:x=>streams.get(x),providers:[ytProvider,scProvider],failedSource,timeoutMs:6000});
+  if(!r.ok)return {ok:false,reason:'unavailable',message:r.message};
+  return{ok:true,url:playable(r.stream,r.playing,base,owner),protocol:r.stream.protocol,duration:r.stream.duration??r.playing.duration,playing:r.playing,expiresAt:Date.now()+15*60000,...(r.fallback?{fallbackReason:'Источник временно недоступен'}:{})};
 }
 
 // ---------- волна (как в ПК; историю "звучавших за 3 часа" присылает телефон) ----------
@@ -279,7 +272,7 @@ const routes: Record<string, [Handler, boolean?]> = {
   '/api/prepare': [
     (b, req) => {
       const c = cleanCandidate(b.candidate);
-      return c ? prepare(c, baseUrl(req)) : { ok: false, reason: 'error', message: 'неверная песня' };
+      return c ? prepare(c, baseUrl(req),identities.get(req)?.kind==='account'?identities.get(req)!.id:undefined,b.fresh===true,SOURCES.has(String(b.failedSource))?b.failedSource as Source:undefined) : { ok: false, reason: 'error', message: 'неверная песня' };
     },
     HEAVY,
   ],
@@ -310,7 +303,7 @@ const routes: Record<string, [Handler, boolean?]> = {
 /** Звук: подписанная ссылка /s/<id> пересылается во внутренний прокси из ПК (повтор при 403, свежая ссылка). */
 function streamAudio(req: http.IncomingMessage, res: http.ServerResponse, url: URL): void {
   const id = url.pathname.slice(3);
-  const local = localById.get(id);
+  const local = allowLegacy?localById.get(id):undefined;
   if (!/^[0-9a-f]{24}$/.test(id) || !streamOk(TOKEN, id, url.searchParams.get('e'), url.searchParams.get('s')) || !local) {
     res.writeHead(403).end();
     return;
@@ -334,19 +327,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (url.pathname === '/health') return json(res, 200, { ok: true });
-  if (!general.take(ip)) return json(res, 429, { error: 'Слишком много запросов' });
-  // Звук проверяется подписью ссылки, а не заголовком: плеер телефона заголовки не передаёт
-  if (url.pathname.startsWith('/s/') && (req.method === 'GET' || req.method === 'HEAD')) return streamAudio(req, res, url);
-
-  const route = routes[url.pathname];
-  if (!route || req.method !== 'POST') return json(res, 404, { error: 'Нет такого адреса' });
-  if (!keyOk(req.headers.authorization, TOKEN)) {
-    if (!badKey.take(ip)) return json(res, 429, { error: 'Слишком много попыток' });
-    console.warn(`[auth] неверный ключ с ${ip}`);
-    await new Promise((r) => setTimeout(r, 500)); // замедляем подбор
-    return json(res, 401, { error: 'Нужен ключ' });
-  }
-  if (route[1] && !heavy.take(ip)) return json(res, 429, { error: 'Слишком много запросов, подожди минуту' });
+  if(url.pathname.startsWith('/s/')&&(req.method==='GET'||req.method==='HEAD')){if(!general.take(ip))return json(res,429,{error:'Слишком много запросов'});return streamAudio(req,res,url);}
+  const audio=url.pathname.startsWith('/account-s/')&&(req.method==='GET'||req.method==='HEAD');
+  const route=routes[url.pathname];if(!audio&&(!route||req.method!=='POST'))return json(res,404,{error:'Нет такого адреса'});
+  let identity:MusicIdentity|null;try{identity=await authenticate(req.headers.authorization);}catch(e){return json(res,503,{error:'Сервис входа временно недоступен'});}
+  if(!identity){if(!badKey.take(ip))return json(res,429,{error:'Слишком много попыток'});return json(res,401,{error:'Войдите в аккаунт mwave'});}
+  identities.set(req,identity);const who=identity.kind==='account'?'account:'+identity.id:ip;
+  if(audio){if(identity.kind!=='account')return json(res,403,{error:'Нужен аккаунт'});if(!audioRate.take(who))return json(res,429,{error:'Слишком много запросов звука'});return accountAudio.serve(req,res,url.pathname.slice(11),identity.id);}
+  if(!general.take(who)||route[1]&&!heavy.take(who))return json(res,429,{error:'Слишком много запросов, подожди минуту'});
   try {
     const body = (await readBody(req)) as Record<string, unknown>;
     json(res, 200, await route[0](body, req));

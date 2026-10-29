@@ -1,0 +1,11 @@
+// Run as root on the VPS. Creates a disposable account; never uses an owner's password or library.
+import {DatabaseSync} from 'node:sqlite';import {randomUUID,randomBytes,createHash} from 'node:crypto';import {readFileSync} from 'node:fs';
+const db=new DatabaseSync('/var/lib/mwave-accounts/accounts.db');db.exec('PRAGMA foreign_keys=ON;PRAGMA busy_timeout=5000');
+const account=randomUUID(),session=randomUUID(),access=randomBytes(32).toString('base64url'),now=Date.now();
+const checks=[];const check=(name,condition)=>{if(!condition)throw Error(name);checks.push(name);};
+try{db.prepare('INSERT INTO accounts(id,login,name,password,role,created) VALUES(?,?,?,?,?,?)').run(account,'qa-iphone-'+now,'Disposable iPhone QA','!no-login','member',now);db.prepare('INSERT INTO sessions(id,account,device,name,created,last_seen) VALUES(?,?,?,?,?,?)').run(session,account,randomUUID(),'Disposable music auth QA',now,now);db.prepare('INSERT INTO access_tokens(hash,session,expires) VALUES(?,?,?)').run(createHash('sha256').update(access).digest('hex'),session,now+60000);
+ const request=(path,token,method='POST')=>fetch('http://127.0.0.1:8780'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(method==='POST'?{body:'{}'}:{})});
+ check('account-info-200',(await request('/api/info',access)).status===200);check('invalid-access-401',(await request('/api/info','x'.repeat(43))).status===401);check('account-stream-not-found',(await request('/account-s/'+randomBytes(18).toString('hex'),access,'GET')).status===404);
+ const legacy=readFileSync('/opt/mwave/secret/token','utf8').trim();check('legacy-info-200',(await request('/api/info',legacy)).status===200);check('legacy-cannot-open-account-audio',(await request('/account-s/'+randomBytes(18).toString('hex'),legacy,'GET')).status===403);
+ db.prepare('UPDATE sessions SET revoked=1 WHERE id=?').run(session);check('revoked-session-401',(await request('/api/info',access)).status===401);check('health',(await fetch('https://mwave.swiftsuper.online:8781/health')).ok);check('accounts-health',(await fetch('http://127.0.0.1:8782/account-api/v1/health')).ok);console.log(JSON.stringify({ok:true,checks},null,2));
+}finally{db.prepare('DELETE FROM accounts WHERE id=?').run(account);db.close();}
